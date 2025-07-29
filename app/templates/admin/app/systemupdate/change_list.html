@@ -1,0 +1,54 @@
+{% extends "admin/change_list.html" %}
+{% load static %}
+
+{% block extrahead %}
+    {{ block.super }}
+    <link rel="stylesheet" type="text/css" href="{% static 'admin/css/system_update.css' %}">
+    <script src="{% static 'admin/js/system_update.js' %}"></script>
+{% endblock %}
+
+{% block object-tools-items %}
+    {{ block.super }}
+    <li>
+        <a href="#" class="btn btn-success" id="check-updates-btn" onclick="checkForUpdates(); return false;" style="background-color: #28a745; border-color: #28a745; color: white; padding: 8px 16px; border-radius: 4px; text-decoration: none; margin-left: 5px;">
+            <i class="fas fa-sync" style="margin-right: 5px;"></i>Check for Updates
+        </a>
+    </li>
+{% endblock %}
+
+{% block content %}
+    <div class="update-info-banner" style="background: linear-gradient(45deg, #007bff, #28a745); color: white; padding: 15px; margin-bottom: 20px; border-radius: 5px;">
+        <h4 style="margin: 0 0 10px 0;"><i class="fas fa-download" style="margin-right: 8px;"></i>System Update Center</h4>
+        <p style="margin: 0; opacity: 0.9;">Keep your PISOWiFi system up-to-date with the latest features, security patches, and improvements from GitHub.</p>
+    </div>
+    
+    <div class="update-stats-cards" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 20px;">
+        <div class="stat-card" style="background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 5px; padding: 15px; text-align: center;">
+            <div style="font-size: 24px; font-weight: bold; color: #007bff;">{{ cl.result_count }}</div>
+            <div style="font-size: 12px; color: #6c757d; text-transform: uppercase;">Total Updates</div>
+        </div>
+        <div class="stat-card" style="background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 5px; padding: 15px; text-align: center;">
+            <div style="font-size: 24px; font-weight: bold; color: #28a745;">{{ cl.result_list|length }}</div>
+            <div style="font-size: 12px; color: #6c757d; text-transform: uppercase;">Available</div>
+        </div>
+        <div class="stat-card" style="background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 5px; padding: 15px; text-align: center;">
+            <div style="font-size: 24px; font-weight: bold; color: #17a2b8;">Auto</div>
+            <div style="font-size: 12px; color: #6c757d; text-transform: uppercase;">Update Mode</div>
+        </div>
+    </div>
+
+    {{ block.super }}
+    
+    <div class="update-instructions" style="background: #e7f3ff; border: 1px solid #b8daff; border-radius: 5px; padding: 15px; margin-top: 20px;">
+        <h5 style="color: #004085; margin: 0 0 10px 0;"><i class="fas fa-info-circle" style="margin-right: 5px;"></i>How to Use System Updates:</h5>
+        <ol style="margin: 0; padding-left: 20px;">
+            <li><strong>Check for Updates:</strong> Click the "Check for Updates" button above to scan GitHub for new releases</li>
+            <li><strong>Download:</strong> Click "Download" on any available update to start downloading</li>
+            <li><strong>Install:</strong> Once downloaded, click "Install" to safely update your system</li>
+            <li><strong>Rollback:</strong> If needed, use "Rollback" to return to the previous version</li>
+        </ol>
+        <p style="margin: 10px 0 0 0; font-size: 13px; color: #495057;">
+            <strong>Note:</strong> All updates create automatic backups before installation. Your system will remain safe during the update process.
+        </p>
+    </div>
+{% endblock %}

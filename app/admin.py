@@ -1511,12 +1511,17 @@ class SystemUpdateAdmin(admin.ModelAdmin):
     
     def changelist_view(self, request, extra_context=None):
         extra_context = extra_context or {}
-        extra_context['title'] = 'System Updates'
-        
-        # Add check for updates button
-        extra_context['check_updates_button'] = True
+        extra_context.update({
+            'title': 'System Updates',
+            'check_updates_button': True,
+            'has_add_permission': False,  # Don't show Add button since updates come from GitHub
+        })
         
         return super().changelist_view(request, extra_context=extra_context)
+    
+    def has_add_permission(self, request):
+        """Disable manual adding of updates - they come from GitHub"""
+        return False
     
     def get_urls(self):
         from django.urls import path
