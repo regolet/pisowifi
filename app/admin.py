@@ -2,7 +2,7 @@ from django.core.exceptions import ObjectDoesNotExist
 from django.contrib import admin, messages
 from django.db.models import Q
 from django.http import HttpResponseRedirect
-from django.urls import path
+from django.urls import path, reverse
 from django.utils import timezone
 from app import models, forms
 
