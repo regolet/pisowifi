@@ -4,7 +4,7 @@ import requests
 import zipfile
 import shutil
 import subprocess
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone as dt_timezone
 from django.utils import timezone
 from django.conf import settings
 from django.core.files.storage import default_storage
@@ -76,7 +76,7 @@ class GitHubUpdateService:
             'version': release['tag_name'].lstrip('v'),
             'title': release['name'] or release['tag_name'],
             'description': release['body'] or 'No description available',
-            'release_date': datetime.strptime(release['published_at'], '%Y-%m-%dT%H:%M:%SZ').replace(tzinfo=timezone.utc),
+            'release_date': datetime.strptime(release['published_at'], '%Y-%m-%dT%H:%M:%SZ').replace(tzinfo=dt_timezone.utc),
             'download_url': release['zipball_url'],
             'file_size': 0  # Will be determined during download
         }
