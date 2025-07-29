@@ -1471,37 +1471,49 @@ class SystemUpdateAdmin(admin.ModelAdmin):
     )
     
     def progress_bar(self, obj):
+        from django.utils.html import format_html
         progress = obj.get_progress_percentage()
         color = 'success' if progress == 100 else 'info'
-        return f'''
-        <div class="progress" style="width: 150px; height: 20px;">
-            <div class="progress-bar bg-{color}" role="progressbar" style="width: {progress}%;" 
-                 aria-valuenow="{progress}" aria-valuemin="0" aria-valuemax="100">{progress}%</div>
-        </div>
-        '''
+        return format_html(
+            '<div class="progress" style="width: 150px; height: 20px;">'
+            '<div class="progress-bar bg-{}" role="progressbar" style="width: {}%;" '
+            'aria-valuenow="{}" aria-valuemin="0" aria-valuemax="100">{}%</div>'
+            '</div>',
+            color, progress, progress, progress
+        )
     progress_bar.short_description = 'Progress'
-    progress_bar.allow_tags = True
     
     def progress_bar_display(self, obj):
         return self.progress_bar(obj)
     progress_bar_display.short_description = 'Download Progress'
-    progress_bar_display.allow_tags = True
     
     def action_buttons(self, obj):
+        from django.utils.html import format_html
         buttons = []
         
         if obj.Status == 'available':
-            buttons.append(f'<a class="btn btn-sm btn-primary" href="#" onclick="startDownload({obj.pk}); return false;">Download</a>')
+            buttons.append(format_html(
+                '<a class="btn btn-sm btn-primary" href="#" onclick="startDownload({}); return false;">Download</a>',
+                obj.pk
+            ))
         elif obj.Status == 'downloading':
-            buttons.append(f'<a class="btn btn-sm btn-warning" href="#" onclick="pauseDownload({obj.pk}); return false;">Pause</a>')
+            buttons.append(format_html(
+                '<a class="btn btn-sm btn-warning" href="#" onclick="pauseDownload({}); return false;">Pause</a>',
+                obj.pk
+            ))
         elif obj.Status == 'ready':
-            buttons.append(f'<a class="btn btn-sm btn-success" href="#" onclick="installUpdate({obj.pk}); return false;">Install</a>')
+            buttons.append(format_html(
+                '<a class="btn btn-sm btn-success" href="#" onclick="installUpdate({}); return false;">Install</a>',
+                obj.pk
+            ))
         elif obj.Status == 'completed' and obj.can_rollback():
-            buttons.append(f'<a class="btn btn-sm btn-danger" href="#" onclick="rollbackUpdate({obj.pk}); return false;">Rollback</a>')
+            buttons.append(format_html(
+                '<a class="btn btn-sm btn-danger" href="#" onclick="rollbackUpdate({}); return false;">Rollback</a>',
+                obj.pk
+            ))
         
-        return ' '.join(buttons)
+        return format_html(' '.join(str(button) for button in buttons))
     action_buttons.short_description = 'Actions'
-    action_buttons.allow_tags = True
     
     class Media:
         js = ('admin/js/system_update.js',)

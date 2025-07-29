@@ -15,26 +15,6 @@
 {% endblock %}
 
 {% block content %}
-    <div class="update-info-banner" style="background: linear-gradient(45deg, #007bff, #28a745); color: white; padding: 15px; margin-bottom: 20px; border-radius: 5px;">
-        <h4 style="margin: 0 0 10px 0;"><i class="fas fa-download" style="margin-right: 8px;"></i>System Update Center</h4>
-        <p style="margin: 0; opacity: 0.9;">Keep your PISOWiFi system up-to-date with the latest features, security patches, and improvements from GitHub.</p>
-    </div>
-    
-    <div class="update-stats-cards" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 20px;">
-        <div class="stat-card" style="background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 5px; padding: 15px; text-align: center;">
-            <div style="font-size: 24px; font-weight: bold; color: #007bff;">{{ cl.result_count }}</div>
-            <div style="font-size: 12px; color: #6c757d; text-transform: uppercase;">Total Updates</div>
-        </div>
-        <div class="stat-card" style="background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 5px; padding: 15px; text-align: center;">
-            <div style="font-size: 24px; font-weight: bold; color: #28a745;">{{ cl.result_list|length }}</div>
-            <div style="font-size: 12px; color: #6c757d; text-transform: uppercase;">Available</div>
-        </div>
-        <div class="stat-card" style="background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 5px; padding: 15px; text-align: center;">
-            <div style="font-size: 24px; font-weight: bold; color: #17a2b8;">Auto</div>
-            <div style="font-size: 12px; color: #6c757d; text-transform: uppercase;">Update Mode</div>
-        </div>
-    </div>
-
     {{ block.super }}
     
     <div class="update-instructions" style="background: #e7f3ff; border: 1px solid #b8daff; border-radius: 5px; padding: 15px; margin-top: 20px;">
