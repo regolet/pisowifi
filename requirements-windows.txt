@@ -1,0 +1,8 @@
+Django==5.1.5
+cryptography
+rsa==4.7
+getmac==0.8.2
+Pillow
+celery
+django-jazzmin==3.0.1
+djangorestframework==3.16.0

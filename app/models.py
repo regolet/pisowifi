@@ -52,11 +52,8 @@ class Clients(models.Model):
 
             self.Time_Left = timedelta(0)
 
-            push_notif = PushNotifications.objects.get(pk=1)
-            push_trigger_time = push_notif.notification_trigger_time
-
-            if (total_time + self.running_time) > push_trigger_time and self.Notified_Flag == True:
-                self.Notified_Flag = False
+            # Push notification logic removed for personal use
+            self.Notified_Flag = False
 
             self.save()
 
@@ -89,6 +86,15 @@ class Clients(models.Model):
     def __str__(self):
         return str(self.IP_Address) + ' | ' + str(self.MAC_Address)
 
+
+class UnauthenticatedClients(Clients):
+    """Proxy model to show clients connected to AP but not authenticated"""
+    class Meta:
+        proxy = True
+        verbose_name = 'Unauthenticated Client'
+        verbose_name_plural = 'Unauthenticated Clients (Connected to AP)'
+
+
 class Whitelist(models.Model):
     MAC_Address = models.CharField(max_length=255, verbose_name='MAC', unique=True)
     Device_Name = models.CharField(max_length=255, null=True, blank=True)
@@ -118,6 +124,14 @@ class Ledger(models.Model):
 
     def __str__(self):
         return 'Transaction no: ' + str(self.pk)
+
+
+class SalesReport(Ledger):
+    """Proxy model for sales reporting and analytics"""
+    class Meta:
+        proxy = True
+        verbose_name = 'Sales Report'
+        verbose_name_plural = 'Sales Reports'
 
 
 class CoinSlot(models.Model):
@@ -310,16 +324,674 @@ class Device(models.Model):
     def __str__(self):
         return 'Hardware Settings'
 
-class PushNotifications(models.Model):
-    Enabled = models.BooleanField(default=False)
-    app_id = models.CharField(verbose_name = "OneSignal App ID", max_length=255, null=True, blank=True)
-    api_key = models.CharField(verbose_name="OneSignal API Key", max_length=255, null=True, blank=True)
-    notification_title = models.CharField(verbose_name="Notification Title", max_length=255, null=True, blank=True)
-    notification_message = models.CharField(verbose_name="Notification Message", max_length=255, null=True, blank=True)
-    notification_trigger_time = models.DurationField(verbose_name="Notification Trigger", default=timezone.timedelta(minutes=0), help_text="Notification will fire when time is equal to the specified trigger time. Format: hh:mm:ss", null=True, blank=True)
+# PushNotifications model removed for personal use
+
+class SecuritySettings(models.Model):
+    TTL_Detection_Enabled = models.BooleanField(default=True, verbose_name='Enable TTL Detection', help_text='Enable detection of internet sharing via TTL analysis')
+    Default_TTL_Value = models.IntegerField(default=64, verbose_name='Expected TTL', help_text='Expected TTL value from client devices (Windows: 128, Linux/Android: 64, macOS: 64)')
+    TTL_Tolerance = models.IntegerField(default=2, verbose_name='TTL Tolerance', help_text='Allowed TTL variance before flagging as suspicious')
+    
+    # Connection Limiting instead of blocking
+    Limit_Connections = models.BooleanField(default=True, verbose_name='Limit Connections', help_text='Limit simultaneous connections for devices with suspicious TTL')
+    Normal_Device_Connections = models.IntegerField(default=3, verbose_name='Normal Device Limit', help_text='Max simultaneous connections for devices with normal TTL')
+    Suspicious_Device_Connections = models.IntegerField(default=1, verbose_name='Suspicious Device Limit', help_text='Max simultaneous connections for devices with suspicious TTL (likely sharing)')
+    Max_TTL_Violations = models.IntegerField(default=5, verbose_name='Max TTL Violations', help_text='Number of TTL violations before applying strict limits')
+    
+    # TTL Modification Settings (MikroTik-style enforcement)
+    Enable_TTL_Modification = models.BooleanField(default=False, verbose_name='Enable TTL Modification', help_text='Apply iptables TTL mangle rules to prevent sharing (MikroTik-style)')
+    TTL_Modification_After_Violations = models.IntegerField(default=10, verbose_name='TTL Modify After Violations', help_text='Number of violations before applying TTL modification rules')
+    Modified_TTL_Value = models.IntegerField(default=1, verbose_name='Modified TTL Value', help_text='TTL value to set for violating devices (1 = blocks sharing completely)')
+    TTL_Rule_Duration = models.DurationField(default=timezone.timedelta(hours=2), verbose_name='TTL Rule Duration', help_text='How long to keep TTL modification rules active')
+    
+    # Legacy blocking settings (optional fallback)
+    Enable_Device_Blocking = models.BooleanField(default=False, verbose_name='Enable Device Blocking', help_text='Enable complete device blocking as last resort')
+    Block_Duration = models.DurationField(default=timezone.timedelta(hours=1), verbose_name='Block Duration', help_text='How long to block violating clients if blocking is enabled')
 
     class Meta:
-        verbose_name = "Push Notifications"
+        verbose_name = 'Security Settings'
+        verbose_name_plural = 'Security Settings'
 
     def __str__(self):
-        return "Push Notification Settings"
+        return 'Security Settings'
+
+class TrafficMonitor(models.Model):
+    Client_MAC = models.CharField(max_length=255, verbose_name='Client MAC')
+    Timestamp = models.DateTimeField(auto_now_add=True)
+    TTL_Value = models.IntegerField(verbose_name='Detected TTL')
+    Packet_Count = models.IntegerField(default=1, verbose_name='Packet Count')
+    Is_Suspicious = models.BooleanField(default=False, verbose_name='Suspicious Activity')
+    Notes = models.TextField(null=True, blank=True, help_text='Additional notes about the traffic')
+
+    class Meta:
+        verbose_name = 'Traffic Monitor'
+        verbose_name_plural = 'Traffic Monitor'
+        ordering = ['-Timestamp']
+
+    def __str__(self):
+        return f'Traffic from {self.Client_MAC} at {self.Timestamp.strftime("%Y-%m-%d %H:%M")}'
+
+class ConnectionTracker(models.Model):
+    Device_MAC = models.CharField(max_length=255, verbose_name='Device MAC')
+    Connection_IP = models.CharField(max_length=15, verbose_name='Connection IP')
+    Session_ID = models.CharField(max_length=100, verbose_name='Session ID', help_text='Unique identifier for this connection session')
+    Connected_At = models.DateTimeField(auto_now_add=True, verbose_name='Connected At')
+    Last_Activity = models.DateTimeField(auto_now=True, verbose_name='Last Activity')
+    Is_Active = models.BooleanField(default=True, verbose_name='Active Connection')
+    TTL_Classification = models.CharField(max_length=20, choices=[
+        ('normal', 'Normal TTL'),
+        ('suspicious', 'Suspicious TTL'),
+        ('unknown', 'Unknown TTL')
+    ], default='unknown', verbose_name='TTL Classification')
+    User_Agent = models.TextField(null=True, blank=True, verbose_name='User Agent')
+    
+    class Meta:
+        verbose_name = 'Connection Tracker'
+        verbose_name_plural = 'Connection Tracker'
+        unique_together = ('Device_MAC', 'Session_ID')
+        ordering = ['-Connected_At']
+    
+    def __str__(self):
+        return f'{self.Device_MAC} - {self.Connection_IP} ({self.TTL_Classification})'
+    
+    def is_session_expired(self, timeout_minutes=30):
+        """Check if connection session has expired due to inactivity"""
+        return timezone.now() - self.Last_Activity > timezone.timedelta(minutes=timeout_minutes)
+    
+    def get_active_connections_for_device(device_mac):
+        """Get count of active connections for a specific device"""
+        # Clean up expired sessions first
+        expired_sessions = ConnectionTracker.objects.filter(
+            Device_MAC=device_mac,
+            Is_Active=True,
+            Last_Activity__lt=timezone.now() - timezone.timedelta(minutes=30)
+        )
+        expired_sessions.update(Is_Active=False)
+        
+        # Return active connection count
+        return ConnectionTracker.objects.filter(
+            Device_MAC=device_mac,
+            Is_Active=True
+        ).count()
+    
+    @staticmethod
+    def cleanup_expired_sessions():
+        """Clean up expired connection sessions"""
+        expired_cutoff = timezone.now() - timezone.timedelta(minutes=30)
+        expired_count = ConnectionTracker.objects.filter(
+            Is_Active=True,
+            Last_Activity__lt=expired_cutoff
+        ).update(Is_Active=False)
+        return expired_count
+
+class DeviceFingerprint(models.Model):
+    FINGERPRINT_STATUS = [
+        ('active', 'Active'),
+        ('suspicious', 'Suspicious'),
+        ('blocked', 'Blocked'),
+        ('whitelist', 'Whitelisted')
+    ]
+    
+    # Unique device identifier based on fingerprinting
+    Device_ID = models.CharField(max_length=64, unique=True, verbose_name='Device Fingerprint ID')
+    
+    # Browser fingerprinting data
+    User_Agent = models.TextField(verbose_name='User Agent String')
+    Screen_Resolution = models.CharField(max_length=20, null=True, blank=True, verbose_name='Screen Resolution')
+    Browser_Language = models.CharField(max_length=10, null=True, blank=True, verbose_name='Browser Language')
+    Timezone_Offset = models.IntegerField(null=True, blank=True, verbose_name='Timezone Offset')
+    Platform = models.CharField(max_length=50, null=True, blank=True, verbose_name='Platform/OS')
+    
+    # Network fingerprinting data
+    Default_TTL_Pattern = models.IntegerField(null=True, blank=True, verbose_name='Consistent TTL Value')
+    Connection_Behavior = models.JSONField(default=dict, verbose_name='Connection Patterns')
+    
+    # Device tracking
+    First_Seen = models.DateTimeField(auto_now_add=True, verbose_name='First Seen')
+    Last_Seen = models.DateTimeField(auto_now=True, verbose_name='Last Seen')
+    Device_Status = models.CharField(max_length=20, choices=FINGERPRINT_STATUS, default='active')
+    
+    # MAC address tracking
+    Known_MACs = models.JSONField(default=list, verbose_name='Associated MAC Addresses')
+    Current_MAC = models.CharField(max_length=255, null=True, blank=True, verbose_name='Current MAC Address')
+    MAC_Randomization_Detected = models.BooleanField(default=False, verbose_name='Uses MAC Randomization')
+    
+    # Violation tracking (persistent across MAC changes)
+    Total_TTL_Violations = models.IntegerField(default=0, verbose_name='Total TTL Violations')
+    Total_Connection_Violations = models.IntegerField(default=0, verbose_name='Connection Limit Violations')
+    Last_Violation_Date = models.DateTimeField(null=True, blank=True, verbose_name='Last Violation')
+    
+    # Additional metadata
+    Device_Name_Hint = models.CharField(max_length=255, null=True, blank=True, verbose_name='Device Name Hint')
+    Admin_Notes = models.TextField(null=True, blank=True, verbose_name='Admin Notes')
+    
+    class Meta:
+        verbose_name = 'Device Fingerprint'
+        verbose_name_plural = 'Device Fingerprints'
+        ordering = ['-Last_Seen']
+    
+    def __str__(self):
+        return f'Device {self.Device_ID[:8]}... ({self.get_device_summary()})'
+    
+    def get_device_summary(self):
+        """Get a human-readable device summary"""
+        if self.Device_Name_Hint:
+            return self.Device_Name_Hint
+        elif self.Platform:
+            return f'{self.Platform} Device'
+        else:
+            return f'Unknown Device'
+    
+    def add_mac_address(self, mac_address):
+        """Add a new MAC address to this device fingerprint"""
+        if mac_address not in self.Known_MACs:
+            self.Known_MACs.append(mac_address)
+            self.Current_MAC = mac_address
+            
+            # Check for MAC randomization pattern
+            if len(self.Known_MACs) > 1:
+                self.MAC_Randomization_Detected = True
+            
+            self.save()
+    
+    def is_using_mac_randomization(self):
+        """Check if device is using MAC randomization"""
+        # Multiple MACs for same device = randomization
+        if len(self.Known_MACs) > 1:
+            return True
+        
+        # Check for randomized MAC patterns (local bit set)
+        if self.Current_MAC:
+            # Second character should be 2, 6, A, or E for locally administered addresses
+            second_char = self.Current_MAC.split(':')[0][1].upper()
+            return second_char in ['2', '6', 'A', 'E']
+        
+        return False
+    
+    def get_current_violations_24h(self):
+        """Get violation count in last 24 hours"""
+        if not self.Last_Violation_Date:
+            return 0
+        
+        if timezone.now() - self.Last_Violation_Date < timezone.timedelta(hours=24):
+            return self.Total_TTL_Violations
+        else:
+            return 0
+    
+    def record_violation(self, violation_type='ttl'):
+        """Record a new violation for this device"""
+        if violation_type == 'ttl':
+            self.Total_TTL_Violations += 1
+        elif violation_type == 'connection':
+            self.Total_Connection_Violations += 1
+        
+        self.Last_Violation_Date = timezone.now()
+        self.save()
+    
+    @staticmethod
+    def generate_device_id(fingerprint_data):
+        """Generate a unique device ID from fingerprint data"""
+        import hashlib
+        
+        # Combine stable fingerprint elements
+        fingerprint_string = ''.join([
+            fingerprint_data.get('user_agent', ''),
+            fingerprint_data.get('screen_resolution', ''),
+            fingerprint_data.get('language', ''),
+            str(fingerprint_data.get('timezone_offset', '')),
+            fingerprint_data.get('platform', ''),
+        ])
+        
+        # Generate SHA-256 hash
+        return hashlib.sha256(fingerprint_string.encode()).hexdigest()
+    
+    @staticmethod
+    def find_or_create_device(fingerprint_data, mac_address):
+        """Find existing device by fingerprint or create new one"""
+        device_id = DeviceFingerprint.generate_device_id(fingerprint_data)
+        
+        device, created = DeviceFingerprint.objects.get_or_create(
+            Device_ID=device_id,
+            defaults={
+                'User_Agent': fingerprint_data.get('user_agent', ''),
+                'Screen_Resolution': fingerprint_data.get('screen_resolution', ''),
+                'Browser_Language': fingerprint_data.get('language', ''),
+                'Timezone_Offset': fingerprint_data.get('timezone_offset'),
+                'Platform': fingerprint_data.get('platform', ''),
+                'Current_MAC': mac_address,
+                'Known_MACs': [mac_address]
+            }
+        )
+        
+        if not created:
+            # Update existing device
+            device.add_mac_address(mac_address)
+            device.Last_Seen = timezone.now()
+            device.save()
+        
+        return device, created
+
+class TTLFirewallRule(models.Model):
+    RULE_TYPES = [
+        ('mangle_ttl', 'TTL Modification (Mangle)'),
+        ('drop_sharing', 'Drop Sharing Traffic'),
+        ('limit_bandwidth', 'Bandwidth Limiting')
+    ]
+    
+    RULE_STATUS = [
+        ('active', 'Active'),
+        ('expired', 'Expired'),
+        ('disabled', 'Disabled'),
+        ('error', 'Error')
+    ]
+    
+    Device_MAC = models.CharField(max_length=255, verbose_name='Device MAC')
+    Rule_Type = models.CharField(max_length=20, choices=RULE_TYPES, default='mangle_ttl', verbose_name='Rule Type')
+    Rule_Status = models.CharField(max_length=10, choices=RULE_STATUS, default='active', verbose_name='Rule Status')
+    TTL_Value = models.IntegerField(verbose_name='TTL Value', help_text='TTL value being applied (usually 1)')
+    Iptables_Chain = models.CharField(max_length=50, default='FORWARD', verbose_name='Iptables Chain')
+    Rule_Command = models.TextField(verbose_name='Iptables Command', help_text='Full iptables command used')
+    Created_At = models.DateTimeField(auto_now_add=True, verbose_name='Created At')
+    Expires_At = models.DateTimeField(verbose_name='Expires At')
+    Last_Checked = models.DateTimeField(auto_now=True, verbose_name='Last Checked')
+    Violation_Count = models.IntegerField(default=0, verbose_name='Violations That Triggered Rule')
+    Admin_Notes = models.TextField(null=True, blank=True, verbose_name='Admin Notes')
+    
+    class Meta:
+        verbose_name = 'TTL Firewall Rule'
+        verbose_name_plural = 'TTL Firewall Rules'
+        ordering = ['-Created_At']
+        unique_together = ('Device_MAC', 'Rule_Type')
+    
+    def __str__(self):
+        return f'TTL Rule: {self.Device_MAC} -> TTL={self.TTL_Value} ({self.Rule_Status})'
+    
+    def is_expired(self):
+        """Check if the TTL rule has expired"""
+        return timezone.now() > self.Expires_At
+    
+    def get_iptables_command(self):
+        """Generate the iptables command for this rule"""
+        if self.Rule_Type == 'mangle_ttl':
+            return [
+                'iptables', '-t', 'mangle', '-A', 'FORWARD',
+                '-m', 'mac', '--mac-source', self.Device_MAC,
+                '-j', 'TTL', '--ttl-set', str(self.TTL_Value),
+                '-m', 'comment', '--comment', f'PisoWiFi-TTL-{self.Device_MAC}'
+            ]
+        return []
+    
+    def get_iptables_delete_command(self):
+        """Generate the iptables delete command for this rule"""
+        if self.Rule_Type == 'mangle_ttl':
+            return [
+                'iptables', '-t', 'mangle', '-D', 'FORWARD',
+                '-m', 'mac', '--mac-source', self.Device_MAC,
+                '-j', 'TTL', '--ttl-set', str(self.TTL_Value),
+                '-m', 'comment', '--comment', f'PisoWiFi-TTL-{self.Device_MAC}'
+            ]
+        return []
+    
+    @staticmethod
+    def cleanup_expired_rules():
+        """Remove expired TTL rules from iptables and database"""
+        from app.views import remove_ttl_firewall_rule
+        
+        expired_rules = TTLFirewallRule.objects.filter(
+            Rule_Status='active',
+            Expires_At__lt=timezone.now()
+        )
+        
+        removed_count = 0
+        for rule in expired_rules:
+            if remove_ttl_firewall_rule(rule.Device_MAC):
+                rule.Rule_Status = 'expired'
+                rule.save()
+                removed_count += 1
+        
+        return removed_count
+
+# Phase 3: Traffic Analysis & Behavioral Intelligence Models
+
+class TrafficAnalysis(models.Model):
+    PROTOCOL_CHOICES = [
+        ('http', 'HTTP/HTTPS'),
+        ('p2p', 'P2P/Torrenting'),
+        ('streaming', 'Video Streaming'),
+        ('gaming', 'Gaming'),
+        ('social', 'Social Media'),
+        ('messaging', 'Messaging'),
+        ('other', 'Other')
+    ]
+    
+    Device_MAC = models.CharField(max_length=255, verbose_name='Device MAC')
+    Device_Fingerprint = models.ForeignKey('DeviceFingerprint', on_delete=models.CASCADE, null=True, blank=True)
+    Timestamp = models.DateTimeField(auto_now_add=True)
+    
+    # Traffic Classification
+    Protocol_Type = models.CharField(max_length=20, choices=PROTOCOL_CHOICES, default='other')
+    Bytes_Up = models.BigIntegerField(default=0, verbose_name='Upload Bytes')
+    Bytes_Down = models.BigIntegerField(default=0, verbose_name='Download Bytes')
+    Packets_Up = models.IntegerField(default=0, verbose_name='Upload Packets')
+    Packets_Down = models.IntegerField(default=0, verbose_name='Download Packets')
+    
+    # Connection Details
+    Source_IP = models.GenericIPAddressField(null=True, blank=True)
+    Destination_IP = models.GenericIPAddressField(null=True, blank=True)
+    Source_Port = models.IntegerField(null=True, blank=True)
+    Destination_Port = models.IntegerField(null=True, blank=True)
+    
+    # Analysis Results
+    Is_Suspicious = models.BooleanField(default=False, verbose_name='Suspicious Traffic')
+    Suspicion_Reason = models.CharField(max_length=255, null=True, blank=True)
+    Bandwidth_Usage_MB = models.FloatField(default=0.0, verbose_name='Bandwidth Usage (MB)')
+    
+    class Meta:
+        verbose_name = 'Traffic Analysis'
+        verbose_name_plural = 'Traffic Analysis'
+        ordering = ['-Timestamp']
+    
+    def __str__(self):
+        return f'{self.Device_MAC} - {self.Protocol_Type} ({self.Bandwidth_Usage_MB:.2f}MB)'
+
+class DeviceBehaviorProfile(models.Model):
+    TRUST_LEVELS = [
+        ('new', 'New Device'),
+        ('trusted', 'Trusted'),
+        ('suspicious', 'Suspicious'),
+        ('abusive', 'Abusive'),
+        ('banned', 'Banned')
+    ]
+    
+    Device_Fingerprint = models.OneToOneField('DeviceFingerprint', on_delete=models.CASCADE)
+    
+    # Behavioral Metrics
+    Average_Session_Duration = models.DurationField(default=timezone.timedelta(minutes=0))
+    Total_Data_Used_MB = models.FloatField(default=0.0, verbose_name='Total Data Used (MB)')
+    Peak_Bandwidth_Usage = models.FloatField(default=0.0, verbose_name='Peak Bandwidth (Mbps)')
+    Favorite_Protocol = models.CharField(max_length=20, null=True, blank=True)
+    
+    # Usage Patterns
+    Most_Active_Hour = models.IntegerField(null=True, blank=True, help_text='Hour of day (0-23)')
+    Average_Concurrent_Connections = models.FloatField(default=1.0)
+    P2P_Usage_Percentage = models.FloatField(default=0.0, verbose_name='P2P Usage %')
+    Streaming_Usage_Percentage = models.FloatField(default=0.0, verbose_name='Streaming Usage %')
+    
+    # Trust & Reputation
+    Trust_Level = models.CharField(max_length=20, choices=TRUST_LEVELS, default='new')
+    Trust_Score = models.FloatField(default=50.0, verbose_name='Trust Score (0-100)')
+    Violation_Score = models.FloatField(default=0.0, verbose_name='Violation Score')
+    
+    # Temporal Data
+    First_Analysis = models.DateTimeField(auto_now_add=True)
+    Last_Updated = models.DateTimeField(auto_now=True)
+    Last_Violation_Date = models.DateTimeField(null=True, blank=True)
+    
+    class Meta:
+        verbose_name = 'Device Behavior Profile'
+        verbose_name_plural = 'Device Behavior Profiles'
+        ordering = ['-Last_Updated']
+    
+    def __str__(self):
+        return f'{self.Device_Fingerprint.get_device_summary()} - Trust: {self.Trust_Level} ({self.Trust_Score:.1f})'
+    
+    def calculate_trust_score(self):
+        """Calculate dynamic trust score based on behavior"""
+        base_score = 50.0
+        
+        # Positive factors
+        if self.Total_Data_Used_MB > 0:
+            # Moderate usage increases trust
+            usage_factor = min(self.Total_Data_Used_MB / 1000, 10)  # Cap at 1GB
+            base_score += usage_factor
+        
+        # Negative factors
+        base_score -= self.Violation_Score * 2
+        base_score -= self.P2P_Usage_Percentage * 0.3  # P2P usage slightly reduces trust
+        
+        # Time-based trust building
+        days_active = (timezone.now() - self.First_Analysis).days
+        base_score += min(days_active * 0.5, 15)  # Max 15 points for longevity
+        
+        # Clamp between 0-100
+        self.Trust_Score = max(0, min(100, base_score))
+        self.save()
+        
+        return self.Trust_Score
+    
+    def update_trust_level(self):
+        """Update trust level based on trust score"""
+        if self.Trust_Score >= 80:
+            self.Trust_Level = 'trusted'
+        elif self.Trust_Score >= 60:
+            self.Trust_Level = 'new'
+        elif self.Trust_Score >= 30:
+            self.Trust_Level = 'suspicious'
+        elif self.Trust_Score >= 10:
+            self.Trust_Level = 'abusive'
+        else:
+            self.Trust_Level = 'banned'
+        
+        self.save()
+
+class AdaptiveQoSRule(models.Model):
+    QOS_ACTIONS = [
+        ('priority_low', 'Low Priority'),
+        ('priority_normal', 'Normal Priority'),
+        ('priority_high', 'High Priority'),
+        ('throttle_light', 'Light Throttling (75%)'),
+        ('throttle_medium', 'Medium Throttling (50%)'),
+        ('throttle_heavy', 'Heavy Throttling (25%)'),
+        ('block', 'Block Traffic')
+    ]
+    
+    Device_MAC = models.CharField(max_length=255, verbose_name='Device MAC')
+    Device_Fingerprint = models.ForeignKey('DeviceFingerprint', on_delete=models.CASCADE, null=True, blank=True)
+    
+    # Rule Configuration
+    Rule_Name = models.CharField(max_length=100, verbose_name='Rule Name')
+    QoS_Action = models.CharField(max_length=20, choices=QOS_ACTIONS, default='priority_normal')
+    Bandwidth_Limit_Down = models.FloatField(null=True, blank=True, verbose_name='Download Limit (Mbps)')
+    Bandwidth_Limit_Up = models.FloatField(null=True, blank=True, verbose_name='Upload Limit (Mbps)')
+    
+    # Triggering Conditions
+    Trigger_Condition = models.TextField(verbose_name='Trigger Condition', help_text='JSON condition for rule activation')
+    Protocol_Filter = models.CharField(max_length=20, null=True, blank=True, verbose_name='Protocol Filter')
+    
+    # Rule Status
+    Is_Active = models.BooleanField(default=True)
+    Auto_Created = models.BooleanField(default=False, verbose_name='Auto-Generated Rule')
+    Created_At = models.DateTimeField(auto_now_add=True)
+    Expires_At = models.DateTimeField(null=True, blank=True)
+    Last_Applied = models.DateTimeField(null=True, blank=True)
+    
+    # Statistics
+    Times_Applied = models.IntegerField(default=0)
+    Bytes_Limited = models.BigIntegerField(default=0)
+    
+    class Meta:
+        verbose_name = 'Adaptive QoS Rule'
+        verbose_name_plural = 'Adaptive QoS Rules'
+        ordering = ['-Created_At']
+    
+    def __str__(self):
+        return f'{self.Rule_Name} - {self.Device_MAC} - {self.QoS_Action}'
+    
+    def is_expired(self):
+        if self.Expires_At:
+            return timezone.now() > self.Expires_At
+        return False
+    
+    def apply_rule(self):
+        """Apply QoS rule using traffic control (tc)"""
+        if self.is_expired():
+            self.Is_Active = False
+            self.save()
+            return False
+        
+        # Update statistics
+        self.Times_Applied += 1
+        self.Last_Applied = timezone.now()
+        self.save()
+        
+        return True
+
+class NetworkIntelligence(models.Model):
+    # System-wide network intelligence and metrics
+    Timestamp = models.DateTimeField(auto_now_add=True)
+    
+    # Network Health Metrics
+    Total_Active_Devices = models.IntegerField(default=0)
+    Total_Bandwidth_Usage_Mbps = models.FloatField(default=0.0)
+    Network_Utilization_Percent = models.FloatField(default=0.0)
+    
+    # Security Metrics
+    Suspicious_Devices_Count = models.IntegerField(default=0)
+    TTL_Violations_Last_Hour = models.IntegerField(default=0)
+    MAC_Randomization_Detected_Count = models.IntegerField(default=0)
+    Active_QoS_Rules = models.IntegerField(default=0)
+    
+    # Revenue Metrics
+    Revenue_Per_Hour = models.FloatField(default=0.0)
+    Average_Session_Duration_Minutes = models.FloatField(default=0.0)
+    Peak_Concurrent_Users = models.IntegerField(default=0)
+    
+    # Protocol Distribution
+    HTTP_Traffic_Percent = models.FloatField(default=0.0)
+    P2P_Traffic_Percent = models.FloatField(default=0.0)
+    Streaming_Traffic_Percent = models.FloatField(default=0.0)
+    Gaming_Traffic_Percent = models.FloatField(default=0.0)
+    Other_Traffic_Percent = models.FloatField(default=0.0)
+    
+    class Meta:
+        verbose_name = 'Network Intelligence'
+        verbose_name_plural = 'Network Intelligence'
+        ordering = ['-Timestamp']
+    
+    def __str__(self):
+        return f'Network Intelligence - {self.Timestamp.strftime("%Y-%m-%d %H:%M")} - {self.Total_Active_Devices} devices'
+
+class BlockedDevices(models.Model):
+    BLOCK_REASONS = [
+        ('ttl_sharing', 'Internet Sharing Detected (TTL)'),
+        ('abuse', 'Terms of Service Violation'),
+        ('manual', 'Manually Blocked'),
+        ('security', 'Security Risk'),
+        ('suspicious', 'Suspicious Activity')
+    ]
+
+    MAC_Address = models.CharField(max_length=255, unique=True, verbose_name='MAC Address')
+    Device_Name = models.CharField(max_length=255, null=True, blank=True, verbose_name='Device Name')
+    Block_Reason = models.CharField(max_length=20, choices=BLOCK_REASONS, default='manual', verbose_name='Block Reason')
+    Blocked_Date = models.DateTimeField(auto_now_add=True, verbose_name='Blocked Date')
+    Auto_Unblock_After = models.DateTimeField(null=True, blank=True, verbose_name='Auto Unblock After')
+    TTL_Violations_Count = models.IntegerField(default=0, verbose_name='TTL Violations')
+    Is_Active = models.BooleanField(default=True, verbose_name='Block Active')
+    Admin_Notes = models.TextField(null=True, blank=True, verbose_name='Admin Notes')
+
+    class Meta:
+        verbose_name = 'Blocked Device'
+        verbose_name_plural = 'Blocked Devices'
+        ordering = ['-Blocked_Date']
+
+    def __str__(self):
+        name = self.Device_Name if self.Device_Name else self.MAC_Address
+        return f'Blocked: {name}'
+
+    def is_block_expired(self):
+        if self.Auto_Unblock_After and timezone.now() > self.Auto_Unblock_After:
+            return True
+        return False
+
+    def unblock_if_expired(self):
+        if self.is_block_expired():
+            self.Is_Active = False
+            self.save()
+            return True
+        return False
+
+
+class SystemUpdate(models.Model):
+    UPDATE_STATUSES = [
+        ('checking', 'Checking for Updates'),
+        ('available', 'Update Available'),
+        ('downloading', 'Downloading Update'),
+        ('ready', 'Ready to Install'),
+        ('installing', 'Installing Update'),
+        ('completed', 'Update Completed'),
+        ('failed', 'Update Failed'),
+        ('rollback', 'Rolling Back'),
+    ]
+    
+    Version_Number = models.CharField(max_length=20, verbose_name='Version Number')
+    Update_Title = models.CharField(max_length=255, verbose_name='Update Title')
+    Description = models.TextField(verbose_name='Description')
+    Release_Date = models.DateTimeField(verbose_name='Release Date')
+    Download_URL = models.URLField(max_length=500, default='https://github.com/regolet/pisowifi', verbose_name='Download URL')
+    File_Size = models.BigIntegerField(default=0, verbose_name='File Size (bytes)')
+    
+    Status = models.CharField(max_length=20, choices=UPDATE_STATUSES, default='checking', verbose_name='Status')
+    Progress = models.IntegerField(default=0, verbose_name='Progress (%)')
+    Downloaded_Bytes = models.BigIntegerField(default=0, verbose_name='Downloaded Bytes')
+    
+    Started_At = models.DateTimeField(null=True, blank=True, verbose_name='Started At')
+    Completed_At = models.DateTimeField(null=True, blank=True, verbose_name='Completed At')
+    Error_Message = models.TextField(null=True, blank=True, verbose_name='Error Message')
+    
+    Backup_Path = models.CharField(max_length=500, null=True, blank=True, verbose_name='Backup Path')
+    Is_Auto_Update = models.BooleanField(default=False, verbose_name='Auto Update')
+    Force_Update = models.BooleanField(default=False, verbose_name='Force Update')
+    
+    Created_At = models.DateTimeField(auto_now_add=True, verbose_name='Created At')
+    Updated_At = models.DateTimeField(auto_now=True, verbose_name='Updated At')
+    
+    class Meta:
+        verbose_name = 'System Update'
+        verbose_name_plural = 'System Updates'
+        ordering = ['-Created_At']
+    
+    def __str__(self):
+        return f'Update {self.Version_Number} - {self.get_Status_display()}'
+    
+    def get_progress_percentage(self):
+        if self.File_Size > 0 and self.Downloaded_Bytes > 0:
+            return min(int((self.Downloaded_Bytes / self.File_Size) * 100), 100)
+        return self.Progress
+    
+    def can_install(self):
+        return self.Status in ['ready', 'failed']
+    
+    def can_rollback(self):
+        return self.Status == 'completed' and self.Backup_Path
+
+
+class UpdateSettings(models.Model):
+    GitHub_Repository = models.CharField(max_length=255, default='regolet/pisowifi', verbose_name='GitHub Repository')
+    Check_Interval_Hours = models.IntegerField(default=24, verbose_name='Check Interval (hours)')
+    Auto_Download = models.BooleanField(default=False, verbose_name='Auto Download Updates')
+    Auto_Install = models.BooleanField(default=False, verbose_name='Auto Install Updates')
+    Backup_Before_Update = models.BooleanField(default=True, verbose_name='Backup Before Update')
+    Max_Backup_Count = models.IntegerField(default=3, verbose_name='Maximum Backup Count')
+    
+    Last_Check = models.DateTimeField(null=True, blank=True, verbose_name='Last Check')
+    Current_Version = models.CharField(max_length=20, default='1.0.0', verbose_name='Current Version')
+    Update_Channel = models.CharField(max_length=20, default='stable', choices=[
+        ('stable', 'Stable'),
+        ('beta', 'Beta'),
+        ('dev', 'Development')
+    ], verbose_name='Update Channel')
+    
+    class Meta:
+        verbose_name = 'Update Settings'
+        verbose_name_plural = 'Update Settings'
+    
+    def __str__(self):
+        return 'System Update Settings'
+    
+    def save(self, *args, **kwargs):
+        self.pk = 1
+        super(UpdateSettings, self).save(*args, **kwargs)
+    
+    @classmethod
+    def load(cls):
+        obj, created = cls.objects.get_or_create(pk=1)
+        return obj

@@ -2,7 +2,7 @@
 
 import datetime
 from django.db import migrations, models
-from django.utils.timezone import utc
+import datetime
 
 
 class Migration(migrations.Migration):
@@ -15,7 +15,7 @@ class Migration(migrations.Migration):
         migrations.AddField(
             model_name='clients',
             name='Date_Created',
-            field=models.DateTimeField(default=datetime.datetime(2020, 9, 6, 5, 49, 20, 842494, tzinfo=utc)),
+            field=models.DateTimeField(default=datetime.datetime(2020, 9, 6, 5, 49, 20, 842494, tzinfo=datetime.timezone.utc)),
         ),
         migrations.AlterField(
             model_name='clients',

@@ -1,0 +1,30 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git remote:*)",
+      "Bash(git push:*)",
+      "Bash(python:*)",
+      "Bash(venvScripts:*)",
+      "Bash(pip install:*)",
+      "Bash(cmd /c:*)",
+      "Bash(find:*)",
+      "Bash(grep:*)",
+      "Bash(npx kill-port:*)",
+      "Bash(rm:*)",
+      "Bash(del test_admin_actions.py)",
+      "WebFetch(domain:127.0.0.1)",
+      "WebFetch(domain:localhost)",
+      "Bash(del test_blocking.py)",
+      "Bash(dir)",
+      "Bash(venv/Scripts/activate:*)",
+      "Bash(mkdir:*)",
+      "Bash(del:*)",
+      "Bash(dir:*)",
+      "Bash(ls:*)",
+      "Bash(sed:*)",
+      "Bash(curl:*)",
+      "Bash(git add:*)"
+    ],
+    "deny": []
+  }
+}

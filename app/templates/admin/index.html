@@ -1,6 +1,396 @@
 {% extends "admin/base_site.html" %}
-{% load i18n static jazzmin %}
+{% load i18n static %}
 
-{% block content %} 
-	<h5>hello world</h5>
+{% block title %}{% trans 'OJO PISOWifi Dashboard' %}{% endblock %}
+
+{% block extrahead %}
+{{ block.super }}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>
+.dashboard-wrapper {
+    margin: 0;
+    padding: 20px;
+    width: 100%;
+    max-width: none;
+}
+.dashboard-card {
+    background: #007bff;
+    color: white;
+    border-radius: 8px;
+    padding: 25px;
+    margin-bottom: 20px;
+    text-align: center;
+}
+.dashboard-card h3 {
+    margin: 0 0 8px 0;
+    font-size: 2.2rem;
+    font-weight: 600;
+}
+.dashboard-card p {
+    margin: 0;
+    font-size: 1rem;
+}
+.stats-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 20px;
+    margin-bottom: 30px;
+}
+.content-row {
+    display: grid;
+    grid-template-columns: 2fr 1fr;
+    gap: 30px;
+    margin-bottom: 30px;
+}
+.chart-container {
+    background: white;
+    border-radius: 8px;
+    padding: 25px;
+    border: 1px solid #ddd;
+    margin-bottom: 20px;
+}
+.chart-container h4 {
+    margin: 0 0 20px 0;
+    font-size: 1.3rem;
+    color: #333;
+}
+.activity-panel {
+    background: white;
+    border-radius: 8px;
+    padding: 25px;
+    border: 1px solid #ddd;
+    height: fit-content;
+}
+.activity-panel h4 {
+    margin: 0 0 20px 0;
+    font-size: 1.3rem;
+    color: #333;
+}
+.activity-item {
+    padding: 12px 0;
+    border-bottom: 1px solid #eee;
+    font-size: 0.9rem;
+}
+.activity-item:last-child {
+    border-bottom: none;
+}
+.status-indicator {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    margin-right: 8px;
+}
+.status-online { background-color: #28a745; }
+.status-warning { background-color: #ffc107; }
+.status-offline { background-color: #dc3545; }
+.quick-actions {
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    gap: 15px;
+    background: white;
+    padding: 25px;
+    border-radius: 8px;
+    border: 1px solid #ddd;
+}
+.quick-action-btn {
+    display: block;
+    padding: 20px 15px;
+    background: #f8f9fa;
+    color: #495057;
+    text-decoration: none;
+    border-radius: 6px;
+    text-align: center;
+    font-size: 0.9rem;
+    border: 1px solid #e9ecef;
+}
+.quick-action-btn:hover {
+    background: #e9ecef;
+    color: #495057;
+    text-decoration: none;
+}
+.quick-action-btn i {
+    display: block;
+    font-size: 1.5rem;
+    margin-bottom: 8px;
+    color: #007bff;
+}
+@media (max-width: 1400px) {
+    .stats-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+    .quick-actions {
+        grid-template-columns: repeat(4, 1fr);
+    }
+}
+@media (max-width: 992px) {
+    .dashboard-wrapper {
+        padding: 15px;
+    }
+    .content-row {
+        grid-template-columns: 1fr;
+        gap: 20px;
+    }
+    .stats-grid {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 15px;
+    }
+    .quick-actions {
+        grid-template-columns: repeat(3, 1fr);
+        padding: 20px;
+    }
+    .chart-container, .activity-panel {
+        padding: 20px;
+    }
+}
+@media (max-width: 768px) {
+    .dashboard-wrapper {
+        padding: 10px;
+    }
+    .stats-grid {
+        grid-template-columns: 1fr;
+        gap: 15px;
+    }
+    .dashboard-card {
+        padding: 20px;
+    }
+    .dashboard-card h3 {
+        font-size: 2rem;
+    }
+    .content-row {
+        gap: 15px;
+    }
+    .chart-container, .activity-panel {
+        padding: 15px;
+    }
+    .chart-container h4, .activity-panel h4 {
+        font-size: 1.2rem;
+    }
+    .quick-actions {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 10px;
+        padding: 15px;
+    }
+    .quick-action-btn {
+        padding: 15px 10px;
+        font-size: 0.8rem;
+    }
+    .quick-action-btn i {
+        font-size: 1.3rem;
+        margin-bottom: 6px;
+    }
+}
+@media (max-width: 576px) {
+    .dashboard-wrapper {
+        padding: 8px;
+    }
+    .stats-grid {
+        gap: 10px;
+    }
+    .dashboard-card {
+        padding: 15px;
+    }
+    .dashboard-card h3 {
+        font-size: 1.8rem;
+    }
+    .dashboard-card p {
+        font-size: 0.9rem;
+    }
+    .chart-container, .activity-panel {
+        padding: 12px;
+    }
+    .chart-container h4, .activity-panel h4 {
+        font-size: 1.1rem;
+        margin-bottom: 15px;
+    }
+    .activity-item {
+        padding: 10px 0;
+        font-size: 0.8rem;
+    }
+    .quick-actions {
+        grid-template-columns: 1fr;
+        gap: 8px;
+        padding: 12px;
+    }
+    .quick-action-btn {
+        padding: 12px 8px;
+        font-size: 0.75rem;
+    }
+    .quick-action-btn i {
+        font-size: 1.2rem;
+        margin-bottom: 4px;
+    }
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="dashboard-wrapper">
+    
+    <!-- Key Metrics Cards -->
+    <div class="stats-grid">
+        <div class="dashboard-card">
+            <h3>{{ total_clients }}</h3>
+            <p>Total Clients</p>
+        </div>
+        <div class="dashboard-card">
+            <h3>{{ active_clients }}</h3>
+            <p>Active Connections</p>
+        </div>
+        <div class="dashboard-card">
+            <h3>₱{{ today_revenue|floatformat:2 }}</h3>
+            <p>Today's Revenue</p>
+        </div>
+        <div class="dashboard-card">
+            <h3>{{ network_status }}</h3>
+            <p>Network Status</p>
+        </div>
+    </div>
+
+    <!-- Main Content Row -->
+    <div class="content-row">
+        <div class="charts-section">
+            <!-- Revenue Chart -->
+            <div class="chart-container">
+                <h4>Revenue Analytics (Last 7 Days)</h4>
+                <canvas id="revenueChart" width="400" height="180"></canvas>
+            </div>
+            
+            <!-- Client Activity Chart -->
+            <div class="chart-container">
+                <h4>Client Activity Status</h4>
+                <canvas id="clientChart" width="400" height="180"></canvas>
+            </div>
+        </div>
+        
+        <div class="sidebar-section">
+            <!-- Recent Activity -->
+            <div class="activity-panel">
+                <h4>Recent Activity</h4>
+                {% for activity in recent_activities %}
+                <div class="activity-item">
+                    <span class="status-indicator status-{{ activity.status }}"></span>
+                    <strong>{{ activity.action }}</strong><br>
+                    <small>{{ activity.device }} - {{ activity.time|timesince }} ago</small>
+                </div>
+                {% empty %}
+                <div class="activity-item">No recent activity</div>
+                {% endfor %}
+            </div>
+            
+            <!-- System Health -->
+            <div class="activity-panel" style="margin-top: 20px;">
+                <h4>System Health</h4>
+                <div class="activity-item">
+                    <span class="status-indicator status-{{ system_health.database }}"></span>
+                    <strong>Database</strong><br>
+                    <small>{{ system_health.database_message }}</small>
+                </div>
+                <div class="activity-item">
+                    <span class="status-indicator status-{{ system_health.network }}"></span>
+                    <strong>Network</strong><br>
+                    <small>{{ system_health.network_message }}</small>
+                </div>
+                <div class="activity-item">
+                    <span class="status-indicator status-{{ system_health.security }}"></span>
+                    <strong>Security</strong><br>
+                    <small>{{ system_health.security_message }}</small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Quick Actions -->
+    <div class="quick-actions">
+        <a href="{% url 'admin:app_clients_changelist' %}" class="quick-action-btn">
+            <i class="fas fa-users"></i>
+            Manage Clients
+        </a>
+        <a href="{% url 'admin:app_salesreport_changelist' %}" class="quick-action-btn">
+            <i class="fas fa-chart-bar"></i>
+            Sales Reports
+        </a>
+        <a href="{% url 'admin:app_securitysettings_changelist' %}" class="quick-action-btn">
+            <i class="fas fa-shield-alt"></i>
+            Security Settings
+        </a>
+        <a href="{% url 'admin:app_network_changelist' %}" class="quick-action-btn">
+            <i class="fas fa-network-wired"></i>
+            Network Config
+        </a>
+        <a href="{% url 'admin:app_vouchers_changelist' %}" class="quick-action-btn">
+            <i class="fas fa-ticket-alt"></i>
+            Vouchers
+        </a>
+        <a href="{% url 'admin:app_trafficmonitor_changelist' %}" class="quick-action-btn">
+            <i class="fas fa-eye"></i>
+            Traffic Monitor
+        </a>
+    </div>
+</div>
+
+<script>
+// Revenue Chart
+const revenueCtx = document.getElementById('revenueChart').getContext('2d');
+const revenueChart = new Chart(revenueCtx, {
+    type: 'line',
+    data: {
+        labels: {{ revenue_labels|safe }},
+        datasets: [{
+            label: 'Revenue (₱)',
+            data: {{ revenue_data|safe }},
+            borderColor: '#667eea',
+            backgroundColor: 'rgba(102, 126, 234, 0.1)',
+            borderWidth: 3,
+            fill: true,
+            tension: 0.4
+        }]
+    },
+    options: {
+        responsive: true,
+        plugins: {
+            legend: {
+                display: false
+            }
+        },
+        scales: {
+            y: {
+                beginAtZero: true,
+                ticks: {
+                    callback: function(value) {
+                        return '₱' + value;
+                    }
+                }
+            }
+        }
+    }
+});
+
+// Client Activity Chart
+const clientCtx = document.getElementById('clientChart').getContext('2d');
+const clientChart = new Chart(clientCtx, {
+    type: 'doughnut',
+    data: {
+        labels: ['Connected', 'Paused', 'Disconnected'],
+        datasets: [{
+            data: {{ client_status_data|safe }},
+            backgroundColor: ['#28a745', '#ffc107', '#dc3545'],
+            borderWidth: 0
+        }]
+    },
+    options: {
+        responsive: true,
+        plugins: {
+            legend: {
+                position: 'bottom'
+            }
+        }
+    }
+});
+
+// Auto-refresh dashboard every 30 seconds
+setInterval(function() {
+    location.reload();
+}, 30000);
+</script>
 {% endblock %}

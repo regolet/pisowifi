@@ -2,7 +2,7 @@
 
 import datetime
 from django.db import migrations, models
-from django.utils.timezone import utc
+import datetime
 
 
 class Migration(migrations.Migration):
@@ -15,7 +15,7 @@ class Migration(migrations.Migration):
         migrations.AddField(
             model_name='coinslot',
             name='Last_Updated',
-            field=models.DateTimeField(default=datetime.datetime(2018, 10, 8, 16, 30, 58, 759287, tzinfo=utc)),
+            field=models.DateTimeField(default=datetime.datetime(2018, 10, 8, 16, 30, 58, 759287, tzinfo=datetime.timezone.utc)),
             preserve_default=False,
         ),
     ]
