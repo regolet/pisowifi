@@ -3245,6 +3245,126 @@ class DatabaseBackupAdmin(admin.ModelAdmin):
         }
 
 
+class VLANSettingsAdmin(Singleton):
+    """Admin for VLAN network configuration"""
+    fieldsets = (
+        ('Network Mode Configuration', {
+            'fields': ('network_mode', 'vlan_id', 'current_status_display')
+        }),
+        ('Network Interfaces', {
+            'fields': ('eth_interface', 'usb_interface'),
+            'classes': ('collapse',)
+        }),
+        ('Advanced Settings', {
+            'fields': ('auto_restart', 'restart_timeout'),
+            'classes': ('collapse',)
+        }),
+        ('Status Information', {
+            'fields': ('last_mode_change',),
+            'classes': ('collapse',)
+        })
+    )
+    
+    readonly_fields = ('current_status_display', 'last_mode_change')
+    
+    def current_status_display(self, obj):
+        from django.utils.html import format_html
+        
+        status_color = '#28a745' if 'Active' in obj.current_status else '#6c757d'
+        
+        return format_html(
+            '<div style="display: flex; align-items: center; gap: 10px;">'
+            '<span style="font-weight: bold; color: {};">{}</span>'
+            '<a href="#" onclick="applyNetworkMode(); return false;" '
+            'style="background-color: #007bff; color: white; padding: 4px 8px; text-decoration: none; border-radius: 3px; font-size: 11px;">'
+            '<i class="fas fa-play" style="margin-right: 3px;"></i>Apply Mode</a>'
+            '</div>'
+            '<script>'
+            'function applyNetworkMode() {{'
+            '    if (confirm("Apply the current network mode configuration? This will restart network services.")) {{'
+            '        fetch("/admin/app/vlansettings/apply-mode/", {{'
+            '            method: "POST",'
+            '            headers: {{'
+            '                "X-CSRFToken": document.querySelector("[name=csrfmiddlewaretoken]").value,'
+            '                "Content-Type": "application/json"'
+            '            }}'
+            '        }})'
+            '.then(response => response.json())'
+            '.then(data => {{'
+            '            if (data.status === "success") {{'
+            '                alert("Network mode applied successfully: " + data.message);'
+            '                location.reload();'
+            '            }} else {{'
+            '                alert("Error: " + data.message);'
+            '            }}'
+            '        }})'
+            '.catch(error => alert("Network error: " + error));'
+            '    }}'
+            '}}'
+            '</script>',
+            status_color,
+            obj.current_status
+        )
+    current_status_display.short_description = 'Current Status'
+    
+    def changelist_view(self, request, extra_context=None):
+        return HttpResponseRedirect(reverse('admin:app_vlansettings_change', args=[1]))
+    
+    def get_urls(self):
+        from django.urls import path
+        urls = super().get_urls()
+        custom_urls = [
+            path('apply-mode/', self.admin_site.admin_view(self.apply_mode_view), name='app_vlansettings_apply_mode'),
+        ]
+        return custom_urls + urls
+    
+    def apply_mode_view(self, request):
+        from django.http import JsonResponse
+        from app.services.network_service import NetworkConfigurationService
+        
+        if request.method == 'POST':
+            try:
+                vlan_settings = models.VLANSettings.load()
+                service = NetworkConfigurationService()
+                
+                # Apply network configuration
+                success, message = service.apply_network_mode(vlan_settings)
+                
+                if success:
+                    # Schedule system restart if auto_restart is enabled
+                    if vlan_settings.auto_restart:
+                        service.restart_system()
+                        return JsonResponse({
+                            'status': 'success',
+                            'message': f'{message}. System will restart in 1 minute.',
+                            'restart': True
+                        })
+                    else:
+                        return JsonResponse({
+                            'status': 'success',
+                            'message': f'{message}. Manual restart required.',
+                            'restart': False
+                        })
+                else:
+                    return JsonResponse({
+                        'status': 'error',
+                        'message': message
+                    })
+                    
+            except Exception as e:
+                return JsonResponse({
+                    'status': 'error',
+                    'message': str(e)
+                })
+        
+        return JsonResponse({'status': 'error', 'message': 'Invalid request method'})
+    
+    def save_model(self, request, obj, form, change):
+        from django.contrib import messages
+        messages.add_message(request, messages.INFO, 'VLAN Settings updated successfully. Click "Apply Mode" to activate changes.')
+        super().save_model(request, obj, form, change)
+
+
 # Replace the default admin site
 admin.site = PisoWifiAdminSite()
 admin.sites.site = admin.site
@@ -3277,3 +3397,4 @@ admin.site.register(models.SystemUpdate, SystemUpdateAdmin)
 admin.site.register(models.UpdateSettings, UpdateSettingsAdmin)
 admin.site.register(models.BackupSettings, BackupSettingsAdmin)
 admin.site.register(models.DatabaseBackup, DatabaseBackupAdmin)
+admin.site.register(models.VLANSettings, VLANSettingsAdmin)

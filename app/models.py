@@ -1350,3 +1350,99 @@ class DatabaseBackup(models.Model):
             '<span style="background-color: {}; color: white; padding: 3px 8px; border-radius: 3px; font-size: 12px; font-weight: bold;">{}</span>',
             color, self.get_backup_type_display()
         )
+
+
+class VLANSettings(models.Model):
+    """VLAN Configuration Settings"""
+    NETWORK_MODES = [
+        ('usb_to_lan', 'USB to LAN Mode'),
+        ('vlan', 'VLAN Mode')
+    ]
+    
+    network_mode = models.CharField(
+        max_length=20, 
+        choices=NETWORK_MODES, 
+        default='usb_to_lan',
+        verbose_name='Network Mode'
+    )
+    
+    vlan_id = models.IntegerField(
+        default=22,
+        help_text='VLAN ID for VLAN mode (1-4094)',
+        verbose_name='VLAN ID'
+    )
+    
+    # Interface settings
+    eth_interface = models.CharField(
+        max_length=20, 
+        default='eth0',
+        verbose_name='Ethernet Interface'
+    )
+    
+    usb_interface = models.CharField(
+        max_length=20, 
+        default='wlan0',
+        verbose_name='USB WiFi Interface'
+    )
+    
+    # Auto-restart settings
+    auto_restart_on_change = models.BooleanField(
+        default=True,
+        verbose_name='Auto Restart on Network Mode Change'
+    )
+    
+    # Status fields
+    current_status = models.CharField(
+        max_length=50,
+        default='USB to LAN Mode Active',
+        verbose_name='Current Status'
+    )
+    
+    last_mode_change = models.DateTimeField(
+        null=True, 
+        blank=True,
+        verbose_name='Last Mode Change'
+    )
+    
+    class Meta:
+        verbose_name = 'VLAN Settings'
+        verbose_name_plural = 'VLAN Settings'
+    
+    def __str__(self):
+        return f'Network Mode: {self.get_network_mode_display()}'
+    
+    def save(self, *args, **kwargs):
+        self.pk = 1
+        super(VLANSettings, self).save(*args, **kwargs)
+    
+    @classmethod
+    def load(cls):
+        obj, created = cls.objects.get_or_create(pk=1)
+        return obj
+    
+    def get_mode_description(self):
+        """Get description of current mode"""
+        if self.network_mode == 'vlan':
+            return f'VLAN Mode (VLAN ID: {self.vlan_id})'
+        else:
+            return 'USB to LAN Mode'
+    
+    def is_vlan_mode(self):
+        """Check if system is in VLAN mode"""
+        return self.network_mode == 'vlan'
+    
+    def get_status_badge(self):
+        """Return HTML badge for current status"""
+        from django.utils.html import format_html
+        
+        if self.network_mode == 'vlan':
+            color = '#007bff'
+            text = f'VLAN {self.vlan_id}'
+        else:
+            color = '#28a745'
+            text = 'USB-LAN'
+        
+        return format_html(
+            '<span style="background-color: {}; color: white; padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: bold;">{}</span>',
+            color, text
+        )
