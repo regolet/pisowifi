@@ -1,13 +1,12 @@
 {% extends "admin/change_list.html" %}
 {% load i18n admin_urls static admin_list %}
 
-{% block content_title %}
-    <h1>{{ title }}</h1>
-{% endblock %}
+{% block content_title %}{{ title }}{% endblock %}
 
 {% block extrahead %}
     {{ block.super }}
     <link rel="stylesheet" href="{% static 'admin/css/system_update.css' %}">
+    <link rel="stylesheet" href="{% static 'vendors/fontawesome-free-5.1.0-web/css/all.css' %}">
     <script src="{% static 'admin/js/system_update.js' %}"></script>
 {% endblock %}
 
@@ -22,22 +21,4 @@
 
 {% block content %}
     {{ block.super }}
-    
-    <div class="update-instructions" style="background: #e7f3ff; border: 1px solid #b8daff; border-radius: 5px; padding: 15px; margin-top: 20px;">
-        <h5 style="color: #004085; margin: 0 0 10px 0;"><i class="fas fa-info-circle" style="margin-right: 5px;"></i>Enhanced System Update Features:</h5>
-        <ul style="margin: 0; padding-left: 20px; display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 10px;">
-            <li><strong>Check for Updates:</strong> Scan GitHub for new releases</li>
-            <li><strong>Download & Install:</strong> Safely update with automatic backups</li>
-            <li><strong>Remove:</strong> Clean up unwanted updates and files</li>
-            <li><strong>Rollback:</strong> Restore previous version if needed</li>
-            <li><strong>Repair:</strong> Fix installation issues automatically</li>
-            <li><strong>Retry:</strong> Restart failed installations</li>
-        </ul>
-        <p style="margin: 10px 0 0 0; font-size: 13px; color: #495057;">
-            <strong>Version Indicators:</strong> 
-            <span class="current-version-label" style="margin: 0 5px;">CURRENT</span> = Running version, 
-            <span class="newer-version-label" style="margin: 0 5px;">NEWER</span> = Update available,
-            <span class="installed-version-label" style="margin: 0 5px;">INSTALLED</span> = Previously installed
-        </p>
-    </div>
 {% endblock %}

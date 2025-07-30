@@ -2256,6 +2256,7 @@ class SystemUpdateAdmin(admin.ModelAdmin):
     list_filter = ('Status', 'Is_Auto_Update', 'Force_Update')
     readonly_fields = ('Progress', 'Downloaded_Bytes', 'Started_At', 'Completed_At', 'Error_Message', 'Backup_Path', 'Installation_Log', 'Created_At', 'Updated_At')
     search_fields = ('Version_Number', 'Update_Title', 'Description')
+    ordering = ('-Release_Date', '-Created_At')  # Sort by latest release date first
     
     fieldsets = (
         ('Update Information', {
@@ -2312,11 +2313,17 @@ class SystemUpdateAdmin(admin.ModelAdmin):
                 obj.Version_Number
             )
         elif self._is_newer_version(obj.Version_Number, current_version):
-            # This is a newer version available
-            version_html = format_html(
-                '<span class="newer-version-badge">{}</span> <span class="newer-version-label">NEWER</span>',
-                obj.Version_Number
-            )
+            # Only show NEWER badge if this version is actually newer than the current version
+            # AND if there's no completed version that's newer than this one
+            all_completed = models.SystemUpdate.objects.filter(Status='completed').exclude(Version_Number=current_version)
+            has_newer_completed = any(self._is_newer_version(completed.Version_Number, obj.Version_Number) for completed in all_completed)
+            
+            if not has_newer_completed:
+                # This is truly a newer version available
+                version_html = format_html(
+                    '<span class="newer-version-badge">{}</span> <span class="newer-version-label">NEWER</span>',
+                    obj.Version_Number
+                )
         
         return version_html
     version_display.short_description = 'Version'
@@ -2342,56 +2349,80 @@ class SystemUpdateAdmin(admin.ModelAdmin):
         
         if obj.Status == 'available':
             buttons.append(format_html(
-                '<a class="btn btn-sm btn-primary" href="#" onclick="startDownload({}); return false;" title="Download update">Download</a>',
+                '<a class="button" href="#" onclick="startDownload({}); return false;" title="Download update" '
+                'style="background-color: #007bff; color: white; padding: 4px 8px; text-decoration: none; border-radius: 3px; margin: 1px; font-size: 11px; white-space: nowrap;">'
+                '<i class="fas fa-download" style="margin-right: 3px;"></i>Download</a>',
                 obj.pk
             ))
             buttons.append(format_html(
-                '<a class="btn btn-sm btn-outline-danger" href="#" onclick="removeUpdate({}); return false;" title="Remove update">Remove</a>',
+                '<a class="button" href="#" onclick="removeUpdate({}); return false;" title="Remove update" '
+                'style="background-color: #dc3545; color: white; padding: 4px 8px; text-decoration: none; border-radius: 3px; margin: 1px; font-size: 11px; white-space: nowrap;">'
+                '<i class="fas fa-trash" style="margin-right: 3px;"></i>Remove</a>',
                 obj.pk
             ))
         elif obj.Status == 'downloading':
             buttons.append(format_html(
-                '<a class="btn btn-sm btn-warning" href="#" onclick="pauseDownload({}); return false;" title="Pause download">Pause</a>',
+                '<a class="button" href="#" onclick="pauseDownload({}); return false;" title="Pause download" '
+                'style="background-color: #ffc107; color: black; padding: 4px 8px; text-decoration: none; border-radius: 3px; margin: 1px; font-size: 11px; white-space: nowrap;">'
+                '<i class="fas fa-pause" style="margin-right: 3px;"></i>Pause</a>',
                 obj.pk
             ))
             buttons.append(format_html(
-                '<a class="btn btn-sm btn-outline-danger" href="#" onclick="removeUpdate({}); return false;" title="Cancel and remove">Remove</a>',
+                '<a class="button" href="#" onclick="removeUpdate({}); return false;" title="Cancel and remove" '
+                'style="background-color: #dc3545; color: white; padding: 4px 8px; text-decoration: none; border-radius: 3px; margin: 1px; font-size: 11px; white-space: nowrap;">'
+                '<i class="fas fa-trash" style="margin-right: 3px;"></i>Remove</a>',
                 obj.pk
             ))
         elif obj.Status == 'ready':
             buttons.append(format_html(
-                '<a class="btn btn-sm btn-success" href="#" onclick="installUpdate({}); return false;" title="Install update">Install</a>',
+                '<a class="button" href="#" onclick="installUpdate({}); return false;" title="Install update" '
+                'style="background-color: #28a745; color: white; padding: 4px 8px; text-decoration: none; border-radius: 3px; margin: 1px; font-size: 11px; white-space: nowrap;">'
+                '<i class="fas fa-rocket" style="margin-right: 3px;"></i>Install</a>',
                 obj.pk
             ))
             buttons.append(format_html(
-                '<a class="btn btn-sm btn-outline-danger" href="#" onclick="removeUpdate({}); return false;" title="Remove update">Remove</a>',
+                '<a class="button" href="#" onclick="removeUpdate({}); return false;" title="Remove update" '
+                'style="background-color: #dc3545; color: white; padding: 4px 8px; text-decoration: none; border-radius: 3px; margin: 1px; font-size: 11px; white-space: nowrap;">'
+                '<i class="fas fa-trash" style="margin-right: 3px;"></i>Remove</a>',
                 obj.pk
             ))
         elif obj.Status == 'completed':
             if obj.can_rollback():
                 buttons.append(format_html(
-                    '<a class="btn btn-sm btn-warning" href="#" onclick="rollbackUpdate({}); return false;" title="Rollback to previous version">Rollback</a>',
+                    '<a class="button" href="#" onclick="rollbackUpdate({}); return false;" title="Rollback to previous version" '
+                    'style="background-color: #ffc107; color: black; padding: 4px 8px; text-decoration: none; border-radius: 3px; margin: 1px; font-size: 11px; white-space: nowrap;">'
+                    '<i class="fas fa-undo" style="margin-right: 3px;"></i>Rollback</a>',
                     obj.pk
                 ))
             buttons.append(format_html(
-                '<a class="btn btn-sm btn-info" href="#" onclick="repairUpdate({}); return false;" title="Repair installation">Repair</a>',
+                '<a class="button" href="#" onclick="repairUpdate({}); return false;" title="Repair installation" '
+                'style="background-color: #17a2b8; color: white; padding: 4px 8px; text-decoration: none; border-radius: 3px; margin: 1px; font-size: 11px; white-space: nowrap;">'
+                '<i class="fas fa-wrench" style="margin-right: 3px;"></i>Repair</a>',
                 obj.pk
             ))
             buttons.append(format_html(
-                '<a class="btn btn-sm btn-outline-danger" href="#" onclick="removeUpdate({}); return false;" title="Remove update record">Remove</a>',
+                '<a class="button" href="#" onclick="removeUpdate({}); return false;" title="Remove update record" '
+                'style="background-color: transparent; color: #dc3545; padding: 4px 8px; text-decoration: none; border: 1px solid #dc3545; border-radius: 3px; margin: 1px; font-size: 11px; white-space: nowrap;">'
+                '<i class="fas fa-trash" style="margin-right: 3px;"></i>Remove</a>',
                 obj.pk
             ))
         elif obj.Status == 'failed':
             buttons.append(format_html(
-                '<a class="btn btn-sm btn-primary" href="#" onclick="retryUpdate({}); return false;" title="Retry installation">Retry</a>',
+                '<a class="button" href="#" onclick="retryUpdate({}); return false;" title="Retry installation" '
+                'style="background-color: #007bff; color: white; padding: 4px 8px; text-decoration: none; border-radius: 3px; margin: 1px; font-size: 11px; white-space: nowrap;">'
+                '<i class="fas fa-redo" style="margin-right: 3px;"></i>Retry</a>',
                 obj.pk
             ))
             buttons.append(format_html(
-                '<a class="btn btn-sm btn-info" href="#" onclick="repairUpdate({}); return false;" title="Repair installation">Repair</a>',
+                '<a class="button" href="#" onclick="repairUpdate({}); return false;" title="Repair installation" '
+                'style="background-color: #17a2b8; color: white; padding: 4px 8px; text-decoration: none; border-radius: 3px; margin: 1px; font-size: 11px; white-space: nowrap;">'
+                '<i class="fas fa-wrench" style="margin-right: 3px;"></i>Repair</a>',
                 obj.pk
             ))
             buttons.append(format_html(
-                '<a class="btn btn-sm btn-outline-danger" href="#" onclick="removeUpdate({}); return false;" title="Remove update">Remove</a>',
+                '<a class="button" href="#" onclick="removeUpdate({}); return false;" title="Remove update" '
+                'style="background-color: transparent; color: #dc3545; padding: 4px 8px; text-decoration: none; border: 1px solid #dc3545; border-radius: 3px; margin: 1px; font-size: 11px; white-space: nowrap;">'
+                '<i class="fas fa-trash" style="margin-right: 3px;"></i>Remove</a>',
                 obj.pk
             ))
         

@@ -1,9 +1,17 @@
 // System Update JavaScript functionality
+(function() {
+    'use strict';
+    
+    // Prevent multiple executions
+    if (window.systemUpdateLoaded) {
+        return;
+    }
+    window.systemUpdateLoaded = true;
 
-let updateProgressInterval = null;
+    let updateProgressInterval = null;
 
-// Check for updates from GitHub
-function checkForUpdates() {
+    // Check for updates from GitHub
+    function checkForUpdates() {
     showLoadingOverlay('Checking for updates...');
     
     fetch('/admin/app/systemupdate/check-updates/', {
@@ -35,7 +43,7 @@ function checkForUpdates() {
 }
 
 // Start download for a specific update
-function startDownload(updateId) {
+    function startDownload(updateId) {
     // Update button to loading state
     updateDownloadButtonState(updateId, 'loading');
     showLoadingOverlay('Starting download...');
@@ -67,7 +75,7 @@ function startDownload(updateId) {
 }
 
 // Pause download
-function pauseDownload(updateId) {
+    function pauseDownload(updateId) {
     fetch(`/admin/app/systemupdate/${updateId}/pause/`, {
         method: 'POST',
         headers: {
@@ -85,7 +93,7 @@ function pauseDownload(updateId) {
 }
 
 // Install update
-function installUpdate(updateId) {
+    function installUpdate(updateId) {
     if (!confirm('Are you sure you want to install this update? The system will be temporarily unavailable.')) {
         return;
     }
@@ -120,7 +128,7 @@ function installUpdate(updateId) {
 }
 
 // Rollback update
-function rollbackUpdate(updateId) {
+    function rollbackUpdate(updateId) {
     if (!confirm('Are you sure you want to rollback this update? This will restore the previous version.')) {
         return;
     }
@@ -152,7 +160,7 @@ function rollbackUpdate(updateId) {
 }
 
 // Remove update
-function removeUpdate(updateId) {
+    function removeUpdate(updateId) {
     if (!confirm('Are you sure you want to remove this update? This will delete all downloaded files and the update record.')) {
         return;
     }
@@ -184,7 +192,7 @@ function removeUpdate(updateId) {
 }
 
 // Repair update
-function repairUpdate(updateId) {
+    function repairUpdate(updateId) {
     if (!confirm('Are you sure you want to repair this update? This will re-run post-installation tasks.')) {
         return;
     }
@@ -219,7 +227,7 @@ function repairUpdate(updateId) {
 }
 
 // Retry update
-function retryUpdate(updateId) {
+    function retryUpdate(updateId) {
     if (!confirm('Are you sure you want to retry this update installation?')) {
         return;
     }
@@ -254,7 +262,7 @@ function retryUpdate(updateId) {
 }
 
 // Progress tracking for downloads
-function startProgressTracking(updateId) {
+    function startProgressTracking(updateId) {
     updateProgressInterval = setInterval(() => {
         fetch(`/admin/app/systemupdate/${updateId}/progress/`)
         .then(response => response.json())
@@ -278,7 +286,7 @@ function startProgressTracking(updateId) {
 }
 
 // Progress tracking for installations
-function startInstallTracking(updateId) {
+    function startInstallTracking(updateId) {
     updateProgressInterval = setInterval(() => {
         fetch(`/admin/app/systemupdate/${updateId}/install-progress/`)
         .then(response => {
@@ -326,7 +334,7 @@ function startInstallTracking(updateId) {
     }, 3000); // Check every 3 seconds for installations
 }
 
-function stopProgressTracking() {
+    function stopProgressTracking() {
     if (updateProgressInterval) {
         clearInterval(updateProgressInterval);
         updateProgressInterval = null;
@@ -334,7 +342,7 @@ function stopProgressTracking() {
 }
 
 // Update progress display
-function updateProgressDisplay(updateId, progress, status) {
+    function updateProgressDisplay(updateId, progress, status) {
     const progressBar = document.querySelector(`tr[data-update-id="${updateId}"] .progress-bar`);
     if (progressBar) {
         progressBar.style.width = progress + '%';
@@ -355,7 +363,7 @@ function updateProgressDisplay(updateId, progress, status) {
 }
 
 // Utility functions
-function showLoadingOverlay(message) {
+    function showLoadingOverlay(message) {
     const overlay = document.createElement('div');
     overlay.id = 'update-loading-overlay';
     overlay.innerHTML = `
@@ -369,14 +377,14 @@ function showLoadingOverlay(message) {
     document.body.appendChild(overlay);
 }
 
-function hideLoadingOverlay() {
+    function hideLoadingOverlay() {
     const overlay = document.getElementById('update-loading-overlay');
     if (overlay) {
         overlay.remove();
     }
 }
 
-function showNotification(message, type) {
+    function showNotification(message, type) {
     const alertClass = type === 'success' ? 'alert-success' : 
                      type === 'error' ? 'alert-danger' : 
                      type === 'info' ? 'alert-info' : 'alert-warning';
@@ -399,7 +407,7 @@ function showNotification(message, type) {
     }, 5000);
 }
 
-function getCookie(name) {
+    function getCookie(name) {
     let cookieValue = null;
     if (document.cookie && document.cookie !== '') {
         const cookies = document.cookie.split(';');
@@ -415,7 +423,7 @@ function getCookie(name) {
 }
 
 // Terminal functions
-function showTerminal(updateId) {
+    function showTerminal(updateId) {
     const terminal = document.createElement('div');
     terminal.id = 'installation-terminal';
     terminal.innerHTML = `
@@ -430,14 +438,14 @@ function showTerminal(updateId) {
     document.body.appendChild(terminal);
 }
 
-function hideTerminal() {
+    function hideTerminal() {
     const terminal = document.getElementById('installation-terminal');
     if (terminal) {
         terminal.remove();
     }
 }
 
-function fetchInstallationLogs(updateId) {
+    function fetchInstallationLogs(updateId) {
     fetch(`/admin/app/systemupdate/${updateId}/installation-logs/`)
     .then(response => {
         if (!response.ok) {
@@ -458,7 +466,7 @@ function fetchInstallationLogs(updateId) {
     });
 }
 
-function updateTerminalContent(logs) {
+    function updateTerminalContent(logs) {
     const terminalContent = document.getElementById('terminal-content');
     if (terminalContent && logs) {
         terminalContent.innerHTML = logs.replace(/\n/g, '<br>');
@@ -467,7 +475,7 @@ function updateTerminalContent(logs) {
 }
 
 // Button state management
-function updateDownloadButtonState(updateId, state) {
+    function updateDownloadButtonState(updateId, state) {
     const row = document.querySelector(`tr[data-update-id="${updateId}"]`);
     if (!row) return;
     
@@ -496,8 +504,8 @@ function updateDownloadButtonState(updateId, state) {
     }
 }
 
-// Initialize when DOM is loaded
-document.addEventListener('DOMContentLoaded', function() {
+    // Initialize when DOM is loaded
+    document.addEventListener('DOMContentLoaded', function() {
     // Try multiple selectors to find the right place to add the button
     const possibleSelectors = [
         '.addlink',           // Django default
@@ -592,4 +600,18 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         }
     });
-});
+    
+    }); // End DOMContentLoaded
+
+    // Export functions to global scope
+    window.checkForUpdates = checkForUpdates;
+    window.startDownload = startDownload;
+    window.pauseDownload = pauseDownload;
+    window.installUpdate = installUpdate;
+    window.rollbackUpdate = rollbackUpdate;
+    window.removeUpdate = removeUpdate;
+    window.repairUpdate = repairUpdate;
+    window.retryUpdate = retryUpdate;
+    window.hideTerminal = hideTerminal;
+
+})(); // End IIFE
