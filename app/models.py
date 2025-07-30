@@ -350,8 +350,133 @@ class Network(models.Model):
     Netmask = models.GenericIPAddressField(protocol='IPv4', default='255.255.255.0', null=False, blank=False)
     DNS_1 = models.GenericIPAddressField(protocol='IPv4', verbose_name='DNS 1', default='8.8.8.8', null=False, blank=False)
     DNS_2 = models.GenericIPAddressField(protocol='IPv4', verbose_name='DNS 2 (Optional)', default='8.8.4.4', null=True, blank=True)
-    Upload_Rate = models.IntegerField(verbose_name='Upload Bandwidth', help_text='Specify global internet upload bandwidth in Kbps. No value = unlimited bandwidth', null=True, blank=True )
-    Download_Rate = models.IntegerField(verbose_name='Download Bandwidth', help_text='Specify global internet download bandwidth in Kbps. No value = unlimited bandwidth', null=True, blank=True )
+    Upload_Rate = models.IntegerField(verbose_name='Upload Bandwidth', help_text='Specify global internet upload bandwidth in Kbps. Default: 100 Mbps (100000 Kbps)', default=100000, null=True, blank=True )
+    Download_Rate = models.IntegerField(verbose_name='Download Bandwidth', help_text='Specify global internet download bandwidth in Kbps. Default: 100 Mbps (100000 Kbps)', default=100000, null=True, blank=True )
+    
+    # Per-client default bandwidth limits
+    Client_Upload_Rate = models.IntegerField(verbose_name='Upload Bandwidth per Client', help_text='Default upload bandwidth limit for each client in Kbps. Default: 5 Mbps (5000 Kbps)', default=5000, null=True, blank=True)
+    Client_Download_Rate = models.IntegerField(verbose_name='Download Bandwidth per Client', help_text='Default download bandwidth limit for each client in Kbps. Default: 5 Mbps (5000 Kbps)', default=5000, null=True, blank=True)
+    
+    # WAN Information
+    WAN_IP = models.GenericIPAddressField(verbose_name='WAN IP Address', help_text='IP address assigned by router to this system (e.g., 192.168.1.x)', null=True, blank=True)
+    WAN_Last_Updated = models.DateTimeField(verbose_name='WAN IP Last Updated', help_text='When the WAN IP was last detected', null=True, blank=True)
+
+    def detect_wan_ip(self):
+        """Automatically detect WAN IP address assigned by router"""
+        import subprocess
+        import psutil
+        from django.utils import timezone
+        
+        try:
+            wan_ip = None
+            
+            # Method 1: Try to get default gateway interface and its IP
+            try:
+                # Get default gateway interface on Linux
+                result = subprocess.run(['ip', 'route', 'show', 'default'], 
+                                      capture_output=True, text=True, check=False)
+                if result.returncode == 0:
+                    # Parse output like: "default via 192.168.1.1 dev eth0"
+                    for line in result.stdout.strip().split('\n'):
+                        if 'default via' in line and 'dev' in line:
+                            parts = line.split()
+                            if 'dev' in parts:
+                                dev_index = parts.index('dev')
+                                if dev_index + 1 < len(parts):
+                                    interface = parts[dev_index + 1]
+                                    # Get IP of this interface
+                                    ip_result = subprocess.run(['ip', 'addr', 'show', interface], 
+                                                             capture_output=True, text=True, check=False)
+                                    if ip_result.returncode == 0:
+                                        import re
+                                        # Look for inet IP/netmask
+                                        match = re.search(r'inet (\d+\.\d+\.\d+\.\d+)', ip_result.stdout)
+                                        if match:
+                                            wan_ip = match.group(1)
+                                            break
+            except:
+                pass
+            
+            # Method 2: Use psutil to find WAN interface
+            if not wan_ip:
+                try:
+                    # Get network interfaces and their addresses
+                    interfaces = psutil.net_if_addrs()
+                    stats = psutil.net_if_stats()
+                    
+                    for interface_name, addresses in interfaces.items():
+                        # Skip loopback and internal interfaces
+                        if interface_name.startswith(('lo', 'docker', 'veth', 'br-')):
+                            continue
+                            
+                        # Check if interface is up
+                        if interface_name in stats and stats[interface_name].isup:
+                            for addr in addresses:
+                                if addr.family == 2:  # AF_INET (IPv4)
+                                    ip = addr.address
+                                    # Check if this looks like a router-assigned IP
+                                    if (ip.startswith('192.168.') or 
+                                        ip.startswith('10.') or 
+                                        ip.startswith('172.16.') or
+                                        ip.startswith('172.17.') or
+                                        ip.startswith('172.18.') or
+                                        ip.startswith('172.19.') or
+                                        ip.startswith('172.2') or
+                                        ip.startswith('172.30.') or
+                                        ip.startswith('172.31.')):
+                                        wan_ip = ip
+                                        break
+                        if wan_ip:
+                            break
+                except:
+                    pass
+            
+            # Method 3: Try Windows method if above fails
+            if not wan_ip:
+                try:
+                    # Windows: use ipconfig
+                    result = subprocess.run(['ipconfig'], capture_output=True, text=True, check=False)
+                    if result.returncode == 0:
+                        import re
+                        # Look for IPv4 Address that's not 127.x.x.x
+                        matches = re.findall(r'IPv4 Address[.\s]*:\s*(\d+\.\d+\.\d+\.\d+)', result.stdout)
+                        for ip in matches:
+                            if not ip.startswith('127.'):
+                                wan_ip = ip
+                                break
+                except:
+                    pass
+            
+            if wan_ip:
+                # Validate IP format
+                from ipaddress import ip_address
+                ip_address(wan_ip)  # This will raise exception if invalid
+                
+                # Update the model
+                self.WAN_IP = wan_ip
+                self.WAN_Last_Updated = timezone.now()
+                self.save()
+                return wan_ip
+            
+            return None
+            
+        except Exception as e:
+            # Log error but don't fail
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.warning(f"Failed to detect WAN IP: {e}")
+            return None
+    
+    @property
+    def wan_ip_display(self):
+        """Display WAN IP with last updated info"""
+        if self.WAN_IP:
+            if self.WAN_Last_Updated:
+                return f"{self.WAN_IP} (Updated: {self.WAN_Last_Updated.strftime('%Y-%m-%d %H:%M')})"
+            else:
+                return self.WAN_IP
+        else:
+            return "Not detected"
 
     class Meta:
         verbose_name = 'Network'
@@ -1456,7 +1581,7 @@ class ZeroTierSettings(models.Model):
         max_length=64,
         blank=True,
         verbose_name='ZeroTier API Token',
-        help_text='API token from ZeroTier Central (my.zerotier.com)'
+        help_text='API token from ZeroTier Central (my.zerotier.com) - Optional: only needed for advanced management features'
     )
     
     central_url = models.URLField(
@@ -1469,7 +1594,7 @@ class ZeroTierSettings(models.Model):
         max_length=16,
         blank=True,
         verbose_name='Network ID',
-        help_text='ZeroTier network ID to join (16 characters)'
+        help_text='ZeroTier network ID to join (16 characters) - Required for basic connectivity'
     )
     
     network_name = models.CharField(
@@ -1570,11 +1695,15 @@ class ZeroTierSettings(models.Model):
         )
     
     def is_configured(self):
-        """Check if ZeroTier is properly configured"""
-        return bool(self.api_token and self.network_id)
+        """Check if ZeroTier has minimum configuration for connectivity"""
+        return bool(self.network_id)  # Only network_id required for basic connectivity
+    
+    def has_api_access(self):
+        """Check if API token is configured for management features"""
+        return bool(self.api_token)
     
     def is_monitoring_enabled(self):
-        """Check if remote monitoring is enabled and configured"""
+        """Check if remote monitoring is enabled and has minimum config"""
         return self.enable_monitoring and self.is_configured()
 
 
@@ -1586,8 +1715,8 @@ class ZeroTierMonitoringData(models.Model):
     
     # Network Status
     network_online = models.BooleanField(default=False)
-    zerotier_version = models.CharField(max_length=50, blank=True)
-    node_id = models.CharField(max_length=10, blank=True)
+    zerotier_version = models.CharField(max_length=50, blank=True, null=True)
+    node_id = models.CharField(max_length=10, blank=True, null=True)
     
     # System Metrics
     cpu_usage = models.FloatField(null=True, blank=True)

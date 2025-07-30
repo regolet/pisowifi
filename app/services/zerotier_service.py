@@ -208,14 +208,16 @@ class ZeroTierService:
         try:
             from app.models import Clients, Vouchers, CoinQueue, SalesReport
             
-            # Connected clients
+            # Connected clients (check based on Expire_On field since Connection_Status is a property)
+            from django.utils import timezone
             connected_clients = Clients.objects.filter(
-                Connection_Status='Connected'
+                Expire_On__isnull=False,
+                Expire_On__gt=timezone.now()
             ).count()
             
-            # Active vouchers
+            # Active vouchers (Not Used status)
             active_vouchers = Vouchers.objects.filter(
-                status='active'
+                Voucher_status='Not Used'
             ).count()
             
             # Coin queue
@@ -225,9 +227,9 @@ class ZeroTierService:
             yesterday = timezone.now() - timedelta(days=1)
             from django.db import models
             recent_sales = SalesReport.objects.filter(
-                created_at__gte=yesterday
+                Date__gte=yesterday
             ).aggregate(
-                total_revenue=models.Sum('total_amount')
+                total_revenue=models.Sum('Denomination')
             )
             total_revenue = recent_sales['total_revenue'] or 0
             
@@ -252,8 +254,9 @@ class ZeroTierService:
     def send_monitoring_data_to_central(self, zt_settings, monitoring_data):
         """Send monitoring data to ZeroTier Central via API"""
         try:
-            if not zt_settings.api_token:
-                return False, "No API token configured"
+            if not zt_settings.has_api_access():
+                logger.info("No API token configured - skipping Central API upload")
+                return True, "Monitoring data stored locally (no API access)"
             
             headers = {
                 'Authorization': f'Bearer {zt_settings.api_token}',
@@ -310,8 +313,8 @@ class ZeroTierService:
             # Create monitoring data record
             monitoring_data = ZeroTierMonitoringData.objects.create(
                 network_online=zt_status['running'] and network_info is not None,
-                zerotier_version=zt_status.get('version', ''),
-                node_id=zt_status.get('node_id', ''),
+                zerotier_version=zt_status.get('version', 'Not Installed'),
+                node_id=zt_status.get('node_id', 'N/A'),
                 cpu_usage=system_metrics['cpu_usage'],
                 memory_usage=system_metrics['memory_usage'],
                 disk_usage=system_metrics['disk_usage'],

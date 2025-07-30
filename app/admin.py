@@ -1030,12 +1030,53 @@ class SettingsAdmin(Singleton, admin.ModelAdmin):
 
 class NetworkAdmin(Singleton, admin.ModelAdmin):
     form = forms.NetworkForm
-    list_display = ('Edit', 'Upload_Rate', 'Download_Rate')
+    list_display = ('Edit', 'WAN_IP', 'Upload_Rate', 'Download_Rate', 'Client_Upload_Rate', 'Client_Download_Rate')
+    readonly_fields = ('wan_ip_display', 'WAN_Last_Updated')
     # list_editable = ('Upload_Rate', 'Download_Rate')
+    
+    fieldsets = (
+        ('Network Configuration', {
+            'fields': ('Server_IP', 'Netmask', 'DNS_1', 'DNS_2')
+        }),
+        ('WAN Information', {
+            'fields': ('wan_ip_display', 'WAN_Last_Updated'),
+            'description': 'IP address assigned by router to this system (automatically detected)'
+        }),
+        ('Global Bandwidth Limits', {
+            'fields': ('Upload_Rate', 'Download_Rate'),
+            'description': 'Overall bandwidth limits for the entire network'
+        }),
+        ('Default Client Bandwidth Limits', {
+            'fields': ('Client_Upload_Rate', 'Client_Download_Rate'),
+            'description': 'Default bandwidth limits applied to each individual client when they connect'
+        }),
+    )
+
+    def refresh_wan_ip(self, request, queryset):
+        """Refresh WAN IP for selected network settings"""
+        for network in queryset:
+            wan_ip = network.detect_wan_ip()
+            if wan_ip:
+                messages.success(request, f'WAN IP updated to: {wan_ip}')
+            else:
+                messages.warning(request, 'Failed to detect WAN IP. Please check internet connection.')
+    
+    refresh_wan_ip.short_description = "Refresh WAN IP Address"
+    actions = ['refresh_wan_ip']
 
     def changelist_view(self, request, extra_context=None):
         extra_context = {'title': 'Global Network Settings'}
         return super(NetworkAdmin, self).changelist_view(request, extra_context=extra_context)
+    
+    def save_model(self, request, obj, form, change):
+        # Auto-detect WAN IP when saving network settings
+        if not obj.WAN_IP or not obj.WAN_Last_Updated:
+            wan_ip = obj.detect_wan_ip()
+            if wan_ip:
+                messages.info(request, f'WAN IP automatically detected: {wan_ip}')
+        
+        messages.add_message(request, messages.INFO, 'Global Network Settings updated successfully.')
+        super(NetworkAdmin, self).save_model(request, obj, form, change)
 
     def has_add_permission(self, *args, **kwargs):
         return not models.Network.objects.exists()
@@ -1049,10 +1090,6 @@ class NetworkAdmin(Singleton, admin.ModelAdmin):
 
     def message_user(self, *args): # overridden method
         pass
-
-    def save_model(self, request, obj, form, change):
-        messages.add_message(request, messages.INFO, 'Global Network Settings updated successfully.')
-        super(NetworkAdmin, self).save_model(request, obj, form, change)
 
 
 class CoinQueueAdmin(admin.ModelAdmin):
