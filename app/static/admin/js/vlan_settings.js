@@ -111,32 +111,60 @@
         }
     }
     
+    function findFields() {
+        // Try multiple selectors to find the fields
+        const selectors = {
+            networkMode: [
+                '#id_network_mode',
+                'select[name="network_mode"]',
+                'select[name*="network_mode"]',
+                'select[id*="network_mode"]'
+            ],
+            vlanId: [
+                '#id_vlan_id', 
+                'input[name="vlan_id"]',
+                'input[name*="vlan_id"]',
+                'input[id*="vlan_id"]'
+            ]
+        };
+        
+        let networkModeField = null;
+        let vlanIdField = null;
+        
+        // Try each selector until we find the fields
+        for (const selector of selectors.networkMode) {
+            networkModeField = document.querySelector(selector);
+            if (networkModeField) {
+                console.log('Network mode field found with selector:', selector, networkModeField);
+                break;
+            }
+        }
+        
+        for (const selector of selectors.vlanId) {
+            vlanIdField = document.querySelector(selector);
+            if (vlanIdField) {
+                console.log('VLAN ID field found with selector:', selector, vlanIdField);
+                break;
+            }
+        }
+        
+        return { networkModeField, vlanIdField };
+    }
+    
     function initializeVlanSettings() {
-        // Debug: Log all form fields to console
-        console.log('VLAN Settings Debug: Looking for form fields...');
+        console.log('VLAN Settings Debug: Initializing...');
+        
+        // Debug: Log all form fields
         const allInputs = document.querySelectorAll('input, select');
+        console.log('All form inputs and selects:', allInputs);
         allInputs.forEach(input => {
-            if (input.id && (input.id.includes('network') || input.id.includes('vlan'))) {
-                console.log('Found field:', input.id, input.type, input);
+            if (input.name || input.id) {
+                console.log(`Field: name="${input.name}" id="${input.id}" type="${input.type}"`);
             }
         });
         
-        // Try multiple ways to find the fields
-        let networkModeField = document.getElementById('id_network_mode');
-        let vlanIdField = document.getElementById('id_vlan_id');
-        
-        // Alternative selectors if IDs don't match
-        if (!networkModeField) {
-            networkModeField = document.querySelector('select[name="network_mode"]') || 
-                              document.querySelector('[name*="network_mode"]');
-            console.log('Network mode field found via name selector:', networkModeField);
-        }
-        
-        if (!vlanIdField) {
-            vlanIdField = document.querySelector('input[name="vlan_id"]') || 
-                         document.querySelector('[name*="vlan_id"]');
-            console.log('VLAN ID field found via name selector:', vlanIdField);
-        }
+        // Find the fields
+        const { networkModeField, vlanIdField } = findFields();
         
         console.log('Final field selection:');
         console.log('Network mode field:', networkModeField);
@@ -148,14 +176,50 @@
         
         if (networkModeField) {
             console.log('Network mode field found, current value:', networkModeField.value);
+            
+            // Check if this field is using Select2
+            const isSelect2 = networkModeField.classList.contains('select2-hidden-accessible');
+            console.log('Field is using Select2:', isSelect2);
+            
             // Set initial state
             updateVlanIdField();
             
-            // Add event listener for changes
-            networkModeField.addEventListener('change', function() {
-                console.log('Network mode changed to:', networkModeField.value);
-                updateVlanIdField();
-            });
+            if (isSelect2) {
+                // For Select2 fields, use jQuery event listener
+                if (typeof $ !== 'undefined') {
+                    console.log('Using Select2/jQuery event listener');
+                    $(networkModeField).on('change', function() {
+                        console.log('Network mode changed via Select2 to:', this.value);
+                        updateVlanIdField();
+                    });
+                    
+                    // Also try Select2-specific events
+                    $(networkModeField).on('select2:select', function() {
+                        console.log('Select2 select event triggered, value:', this.value);
+                        setTimeout(updateVlanIdField, 50); // Small delay to ensure value is updated
+                    });
+                } else {
+                    console.log('jQuery not available for Select2 events');
+                    // Fallback: try to find the Select2 container and add click listener
+                    const select2Container = document.querySelector('.select2-container');
+                    if (select2Container) {
+                        console.log('Found Select2 container, adding click listener');
+                        select2Container.addEventListener('click', function() {
+                            setTimeout(function() {
+                                console.log('Select2 clicked, checking for value change...');
+                                updateVlanIdField();
+                            }, 100);
+                        });
+                    }
+                }
+            } else {
+                // For regular select fields, use standard event listener
+                console.log('Using standard event listener');
+                networkModeField.addEventListener('change', function() {
+                    console.log('Network mode changed to:', networkModeField.value);
+                    updateVlanIdField();
+                });
+            }
         } else {
             console.log('Network mode field NOT found');
         }
@@ -169,6 +233,30 @@
             console.log('VLAN ID field NOT found');
         }
     }
+    
+    // Export functions for manual testing
+    window.debugVlanSettings = function() {
+        console.log('=== Manual VLAN Settings Debug ===');
+        initializeVlanSettings();
+        
+        if (globalNetworkModeField && globalVlanIdField) {
+            console.log('Manually calling updateVlanIdField...');
+            updateVlanIdField();
+        } else {
+            console.log('Fields not found - cannot update');
+        }
+    };
+    
+    window.testVlanFieldToggle = function() {
+        if (globalNetworkModeField && globalVlanIdField) {
+            console.log('Testing field toggle...');
+            console.log('Current network mode:', globalNetworkModeField.value);
+            console.log('Current VLAN ID disabled state:', globalVlanIdField.disabled);
+            updateVlanIdField();
+        } else {
+            console.log('Fields not available for testing');
+        }
+    };
     
     // Initialize when DOM is ready
     if (document.readyState === 'loading') {
