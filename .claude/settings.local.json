@@ -28,7 +28,8 @@
       "Bash(git commit:*)",
       "Bash(timeout:*)",
       "Bash(git tag:*)",
-      "Bash(git describe:*)"
+      "Bash(git describe:*)",
+      "WebFetch(domain:docs.zerotier.com)"
     ],
     "deny": []
   }

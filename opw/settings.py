@@ -189,6 +189,10 @@ JAZZMIN_SETTINGS = {
         'app.BackupSettings': 'fas fa-archive',
         'app.DatabaseBackup': 'fas fa-database',
         'app.VLANSettings': 'fas fa-sitemap',
+        
+        # ZeroTier Remote Monitoring
+        'app.ZeroTierSettings': 'fas fa-satellite-dish',
+        'app.ZeroTierMonitoringData': 'fas fa-chart-line',
     },
     
     # Custom CSS and JS

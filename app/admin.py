@@ -3371,3 +3371,249 @@ admin.site.register(models.UpdateSettings, UpdateSettingsAdmin)
 admin.site.register(models.BackupSettings, BackupSettingsAdmin)
 admin.site.register(models.DatabaseBackup, DatabaseBackupAdmin)
 admin.site.register(models.VLANSettings, VLANSettingsAdmin)
+
+
+class ZeroTierSettingsAdmin(Singleton):
+    """Admin for ZeroTier remote monitoring configuration"""
+    fieldsets = (
+        ('API Configuration', {
+            'fields': ('api_token', 'central_url')
+        }),
+        ('Network Configuration', {
+            'fields': ('network_id', 'network_name')
+        }),
+        ('Device Configuration', {
+            'fields': ('device_name', 'device_description')
+        }),
+        ('Monitoring Settings', {
+            'fields': ('enable_monitoring', 'auto_authorize', 'monitoring_interval')
+        }),
+        ('Status Information', {
+            'fields': ('connection_status_display', 'zerotier_ip', 'last_seen', 'last_monitoring_update'),
+            'classes': ('collapse',)
+        })
+    )
+    
+    readonly_fields = ('connection_status_display', 'zerotier_ip', 'last_seen', 'last_monitoring_update')
+    
+    def connection_status_display(self, obj):
+        from django.utils.html import format_html
+        from app.services.zerotier_service import ZeroTierService
+        
+        service = ZeroTierService()
+        zt_status = service.get_zerotier_status()
+        
+        # Installation status
+        install_status = "✅ Installed" if zt_status['installed'] else "❌ Not Installed"
+        service_status = "🟢 Running" if zt_status['running'] else "🔴 Stopped"
+        
+        return format_html(
+            '<div style="margin-bottom: 10px;">'
+            '<strong>ZeroTier Status:</strong><br>'
+            'Installation: {}<br>'
+            'Service: {}<br>'
+            'Version: {}<br>'
+            'Node ID: {}<br>'
+            '</div>'
+            '<div style="display: flex; gap: 10px; margin-top: 15px;">'
+            '<a href="#" onclick="toggleMonitoring(); return false;" '
+            'style="background-color: #007bff; color: white; padding: 6px 12px; text-decoration: none; border-radius: 3px; font-size: 12px;">'
+            '<i class="fas fa-power-off" style="margin-right: 5px;"></i>Toggle Service</a>'
+            '<a href="#" onclick="testConnection(); return false;" '
+            'style="background-color: #28a745; color: white; padding: 6px 12px; text-decoration: none; border-radius: 3px; font-size: 12px;">'
+            '<i class="fas fa-satellite-dish" style="margin-right: 5px;"></i>Test Connection</a>'
+            '<a href="#" onclick="collectMetrics(); return false;" '
+            'style="background-color: #17a2b8; color: white; padding: 6px 12px; text-decoration: none; border-radius: 3px; font-size: 12px;">'
+            '<i class="fas fa-chart-line" style="margin-right: 5px;"></i>Collect Metrics</a>'
+            '</div>'
+            '<script>'
+            'function toggleMonitoring() {{'
+            '    if (confirm("Toggle ZeroTier monitoring service?")) {{'
+            '        fetch("/admin/app/zerotiersettings/toggle-service/", {{'
+            '            method: "POST",'
+            '            headers: {{'
+            '                "X-CSRFToken": document.querySelector("[name=csrfmiddlewaretoken]").value,'
+            '                "Content-Type": "application/json"'
+            '            }}'
+            '        }})'
+            '.then(response => response.json())'
+            '.then(data => {{'
+            '            alert(data.message);'
+            '            location.reload();'
+            '        }})'
+            '.catch(error => alert("Error: " + error));'
+            '    }}'
+            '}}'
+            'function testConnection() {{'
+            '    fetch("/admin/app/zerotiersettings/test-connection/", {{'
+            '        method: "POST",'
+            '        headers: {{'
+            '            "X-CSRFToken": document.querySelector("[name=csrfmiddlewaretoken]").value,'
+            '            "Content-Type": "application/json"'
+            '        }}'
+            '    }})'
+            '.then(response => response.json())'
+            '.then(data => alert(data.message))'
+            '.catch(error => alert("Error: " + error));'
+            '}}'
+            'function collectMetrics() {{'
+            '    fetch("/admin/app/zerotiersettings/collect-metrics/", {{'
+            '        method: "POST",'
+            '        headers: {{'
+            '            "X-CSRFToken": document.querySelector("[name=csrfmiddlewaretoken]").value,'
+            '            "Content-Type": "application/json"'
+            '        }}'
+            '    }})'
+            '.then(response => response.json())'
+            '.then(data => alert(data.message))'
+            '.catch(error => alert("Error: " + error));'
+            '}}'
+            '</script>',
+            install_status,
+            service_status,
+            zt_status.get('version', 'Unknown'),
+            zt_status.get('node_id', 'Unknown')
+        )
+    connection_status_display.short_description = 'ZeroTier Status & Controls'
+    
+    def changelist_view(self, request, extra_context=None):
+        return HttpResponseRedirect(reverse('admin:app_zerotiersettings_change', args=[1]))
+    
+    def get_urls(self):
+        from django.urls import path
+        urls = super().get_urls()
+        custom_urls = [
+            path('toggle-service/', self.admin_site.admin_view(self.toggle_service_view), name='app_zerotiersettings_toggle_service'),
+            path('test-connection/', self.admin_site.admin_view(self.test_connection_view), name='app_zerotiersettings_test_connection'),
+            path('collect-metrics/', self.admin_site.admin_view(self.collect_metrics_view), name='app_zerotiersettings_collect_metrics'),
+        ]
+        return custom_urls + urls
+    
+    def toggle_service_view(self, request):
+        from django.http import JsonResponse
+        from app.services.zerotier_service import ZeroTierService
+        
+        if request.method == 'POST':
+            try:
+                zt_settings = models.ZeroTierSettings.load()
+                service = ZeroTierService()
+                
+                if zt_settings.enable_monitoring:
+                    success, message = service.start_monitoring_service(zt_settings)
+                else:
+                    success, message = service.stop_monitoring_service(zt_settings)
+                
+                return JsonResponse({
+                    'status': 'success' if success else 'error',
+                    'message': message
+                })
+                
+            except Exception as e:
+                return JsonResponse({
+                    'status': 'error',
+                    'message': str(e)
+                })
+        
+        return JsonResponse({'status': 'error', 'message': 'Invalid request method'})
+    
+    def test_connection_view(self, request):
+        from django.http import JsonResponse
+        from app.services.zerotier_service import ZeroTierService
+        
+        if request.method == 'POST':
+            try:
+                zt_settings = models.ZeroTierSettings.load()
+                service = ZeroTierService()
+                
+                # Get ZeroTier status
+                zt_status = service.get_zerotier_status()
+                
+                if not zt_status['installed']:
+                    return JsonResponse({
+                        'status': 'error',
+                        'message': 'ZeroTier is not installed'
+                    })
+                
+                if not zt_status['running']:
+                    return JsonResponse({
+                        'status': 'error',
+                        'message': 'ZeroTier service is not running'
+                    })
+                
+                # Get network info
+                network_info = None
+                if zt_settings.network_id:
+                    network_info = service.get_network_info(zt_settings.network_id)
+                
+                if network_info:
+                    return JsonResponse({
+                        'status': 'success',
+                        'message': f'Connected to network {zt_settings.network_id}. IP: {network_info.get("zt_ip", "Unknown")}'
+                    })
+                else:
+                    return JsonResponse({
+                        'status': 'warning',
+                        'message': 'ZeroTier is running but not connected to configured network'
+                    })
+                
+            except Exception as e:
+                return JsonResponse({
+                    'status': 'error',
+                    'message': str(e)
+                })
+        
+        return JsonResponse({'status': 'error', 'message': 'Invalid request method'})
+    
+    def collect_metrics_view(self, request):
+        from django.http import JsonResponse
+        from app.services.zerotier_service import ZeroTierService
+        
+        if request.method == 'POST':
+            try:
+                zt_settings = models.ZeroTierSettings.load()
+                service = ZeroTierService()
+                
+                success, message = service.collect_and_store_monitoring_data(zt_settings)
+                
+                return JsonResponse({
+                    'status': 'success' if success else 'error',
+                    'message': message
+                })
+                
+            except Exception as e:
+                return JsonResponse({
+                    'status': 'error',
+                    'message': str(e)
+                })
+        
+        return JsonResponse({'status': 'error', 'message': 'Invalid request method'})
+    
+    def save_model(self, request, obj, form, change):
+        from django.contrib import messages
+        messages.add_message(request, messages.INFO, 'ZeroTier settings updated successfully.')
+        super().save_model(request, obj, form, change)
+
+
+class ZeroTierMonitoringDataAdmin(admin.ModelAdmin):
+    """Admin for ZeroTier monitoring data"""
+    list_display = ('timestamp', 'network_status', 'connected_clients', 'cpu_usage', 'memory_usage', 'total_revenue')
+    list_filter = ('network_online', 'timestamp')
+    readonly_fields = ('timestamp', 'network_online', 'zerotier_version', 'node_id', 
+                      'cpu_usage', 'memory_usage', 'disk_usage', 'connected_clients',
+                      'total_bandwidth_up', 'total_bandwidth_down', 'active_vouchers',
+                      'total_revenue', 'coin_queue_count')
+    ordering = ('-timestamp',)
+    
+    def network_status(self, obj):
+        return "🟢 Online" if obj.network_online else "🔴 Offline"
+    network_status.short_description = 'Network Status'
+    
+    def has_add_permission(self, request):
+        return False  # Monitoring data is auto-generated
+    
+    def has_change_permission(self, request, obj=None):
+        return False  # Read-only data
+
+
+admin.site.register(models.ZeroTierSettings, ZeroTierSettingsAdmin)
+admin.site.register(models.ZeroTierMonitoringData, ZeroTierMonitoringDataAdmin)

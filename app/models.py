@@ -1446,3 +1446,168 @@ class VLANSettings(models.Model):
             '<span style="background-color: {}; color: white; padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: bold;">{}</span>',
             color, text
         )
+
+
+class ZeroTierSettings(models.Model):
+    """ZeroTier Remote Monitoring Configuration"""
+    
+    # API Configuration
+    api_token = models.CharField(
+        max_length=64,
+        blank=True,
+        verbose_name='ZeroTier API Token',
+        help_text='API token from ZeroTier Central (my.zerotier.com)'
+    )
+    
+    central_url = models.URLField(
+        default='https://my.zerotier.com',
+        verbose_name='ZeroTier Central URL'
+    )
+    
+    # Network Configuration
+    network_id = models.CharField(
+        max_length=16,
+        blank=True,
+        verbose_name='Network ID',
+        help_text='ZeroTier network ID to join (16 characters)'
+    )
+    
+    network_name = models.CharField(
+        max_length=100,
+        blank=True,
+        verbose_name='Network Name',
+        help_text='Descriptive name for this network'
+    )
+    
+    # Device Configuration
+    device_name = models.CharField(
+        max_length=100,
+        default='PisoWiFi-System',
+        verbose_name='Device Name',
+        help_text='Name for this PisoWiFi system in ZeroTier network'
+    )
+    
+    device_description = models.TextField(
+        blank=True,
+        verbose_name='Device Description',
+        help_text='Description of this PisoWiFi installation'
+    )
+    
+    # Monitoring Settings
+    enable_monitoring = models.BooleanField(
+        default=False,
+        verbose_name='Enable Remote Monitoring',
+        help_text='Allow remote monitoring of this system via ZeroTier'
+    )
+    
+    auto_authorize = models.BooleanField(
+        default=True,
+        verbose_name='Auto-Authorize Device',
+        help_text='Automatically authorize this device when joining network'
+    )
+    
+    monitoring_interval = models.IntegerField(
+        default=300,
+        verbose_name='Monitoring Interval (seconds)',
+        help_text='How often to update monitoring data (default: 5 minutes)'
+    )
+    
+    # Status Fields
+    connection_status = models.CharField(
+        max_length=20,
+        default='Disconnected',
+        verbose_name='Connection Status'
+    )
+    
+    zerotier_ip = models.GenericIPAddressField(
+        null=True,
+        blank=True,
+        verbose_name='ZeroTier IP Address'
+    )
+    
+    last_seen = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name='Last Seen'
+    )
+    
+    last_monitoring_update = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name='Last Monitoring Update'
+    )
+    
+    class Meta:
+        verbose_name = 'ZeroTier Remote Monitoring'
+        verbose_name_plural = 'ZeroTier Remote Monitoring'
+    
+    def __str__(self):
+        return f'ZeroTier Monitoring: {self.device_name}'
+    
+    def save(self, *args, **kwargs):
+        self.pk = 1  # Singleton pattern
+        super().save(*args, **kwargs)
+    
+    @classmethod
+    def load(cls):
+        obj, created = cls.objects.get_or_create(pk=1)
+        return obj
+    
+    def get_status_badge(self):
+        """Return HTML badge for connection status"""
+        from django.utils.html import format_html
+        
+        if self.connection_status == 'Connected':
+            color = '#28a745'
+        elif self.connection_status == 'Connecting':
+            color = '#ffc107'
+        else:
+            color = '#dc3545'
+        
+        return format_html(
+            '<span style="background-color: {}; color: white; padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: bold;">{}</span>',
+            color, self.connection_status
+        )
+    
+    def is_configured(self):
+        """Check if ZeroTier is properly configured"""
+        return bool(self.api_token and self.network_id)
+    
+    def is_monitoring_enabled(self):
+        """Check if remote monitoring is enabled and configured"""
+        return self.enable_monitoring and self.is_configured()
+
+
+class ZeroTierMonitoringData(models.Model):
+    """Store ZeroTier monitoring data snapshots"""
+    
+    # System Information
+    timestamp = models.DateTimeField(auto_now_add=True)
+    
+    # Network Status
+    network_online = models.BooleanField(default=False)
+    zerotier_version = models.CharField(max_length=50, blank=True)
+    node_id = models.CharField(max_length=10, blank=True)
+    
+    # System Metrics
+    cpu_usage = models.FloatField(null=True, blank=True)
+    memory_usage = models.FloatField(null=True, blank=True)
+    disk_usage = models.FloatField(null=True, blank=True)
+    
+    # Network Metrics
+    connected_clients = models.IntegerField(default=0)
+    total_bandwidth_up = models.BigIntegerField(default=0)
+    total_bandwidth_down = models.BigIntegerField(default=0)
+    
+    # PisoWiFi Specific
+    active_vouchers = models.IntegerField(default=0)
+    total_revenue = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    coin_queue_count = models.IntegerField(default=0)
+    
+    class Meta:
+        verbose_name = 'ZeroTier Monitoring Data'
+        verbose_name_plural = 'ZeroTier Monitoring Data'
+        ordering = ['-timestamp']
+    
+    def __str__(self):
+        return f'Monitoring Data: {self.timestamp.strftime("%Y-%m-%d %H:%M:%S")}'
