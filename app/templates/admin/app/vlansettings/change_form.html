@@ -5,7 +5,9 @@
 
 {% block submit_buttons_bottom %}
 <div class="submit-row">
-    <input type="submit" value="Save and apply" class="default" name="_save">
+    <div class="form-group">
+        <input type="submit" value="Save and apply" class="btn btn-success form-control" name="_save">
+    </div>
 </div>
 {% endblock %}
 
@@ -15,6 +17,13 @@
         /* Hide unnecessary elements */
         .deletelink, .historylink, .addlink {
             display: none !important;
+        }
+        
+        /* Make the submit row match Jazzmin styling */
+        .submit-row {
+            padding: 1rem;
+            background: transparent;
+            border: none;
         }
     </style>
 {% endblock %}
