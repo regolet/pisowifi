@@ -5,36 +5,13 @@
 
 {% block submit_buttons_bottom %}
 <div class="submit-row">
-    <input type="submit" value="Save and Apply Network Configuration" class="default vlan-save-btn" name="_save">
+    <input type="submit" value="Save and apply" class="default" name="_save">
 </div>
 {% endblock %}
 
 {% block extrahead %}
     {{ block.super }}
     <style>
-        /* Custom styling for VLAN save button */
-        .vlan-save-btn {
-            background-color: #007bff !important;
-            border-color: #007bff !important;
-            color: white !important;
-            font-weight: bold !important;
-            padding: 10px 20px !important;
-            font-size: 14px !important;
-            border-radius: 4px !important;
-            transition: background-color 0.3s ease !important;
-        }
-        
-        .vlan-save-btn:hover {
-            background-color: #0056b3 !important;
-            border-color: #0056b3 !important;
-        }
-        
-        .vlan-save-btn:focus, .vlan-save-btn:active {
-            background-color: #004085 !important;
-            border-color: #004085 !important;
-            box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.5) !important;
-        }
-        
         /* Hide unnecessary elements */
         .deletelink, .historylink, .addlink {
             display: none !important;
