@@ -3256,7 +3256,7 @@ class VLANSettingsAdmin(Singleton):
             'classes': ('collapse',)
         }),
         ('Advanced Settings', {
-            'fields': ('auto_restart', 'restart_timeout'),
+            'fields': ('auto_restart_on_change',),
             'classes': ('collapse',)
         }),
         ('Status Information', {
@@ -3332,7 +3332,7 @@ class VLANSettingsAdmin(Singleton):
                 
                 if success:
                     # Schedule system restart if auto_restart is enabled
-                    if vlan_settings.auto_restart:
+                    if vlan_settings.auto_restart_on_change:
                         service.restart_system()
                         return JsonResponse({
                             'status': 'success',
