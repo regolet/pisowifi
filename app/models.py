@@ -1209,3 +1209,144 @@ class UpdateSettings(models.Model):
         
         # Final fallback
         return '2.0.1'
+
+
+class BackupSettings(models.Model):
+    """Settings for database backup configuration"""
+    Auto_Backup_Enabled = models.BooleanField(default=True, verbose_name='Enable Auto Backup')
+    Auto_Backup_Interval_Hours = models.IntegerField(default=24, verbose_name='Auto Backup Interval (hours)')
+    Max_Backup_Count = models.IntegerField(default=10, verbose_name='Maximum Backup Count')
+    Backup_Location = models.CharField(max_length=500, default='backups/database/', verbose_name='Backup Directory')
+    
+    # Backup type settings
+    Include_Client_Data = models.BooleanField(default=True, verbose_name='Include Client Data in Auto Backup')
+    Include_System_Settings = models.BooleanField(default=True, verbose_name='Include System Settings in Auto Backup')
+    Include_Logs = models.BooleanField(default=False, verbose_name='Include Logs in Auto Backup')
+    
+    # Compression and retention
+    Compress_Backups = models.BooleanField(default=True, verbose_name='Compress Backup Files')
+    Retention_Days = models.IntegerField(default=30, verbose_name='Backup Retention (days)')
+    
+    # Notification settings
+    Email_Notifications = models.BooleanField(default=False, verbose_name='Email Backup Notifications')
+    Email_Recipients = models.TextField(blank=True, help_text='Email addresses separated by commas', verbose_name='Email Recipients')
+    
+    Last_Auto_Backup = models.DateTimeField(null=True, blank=True, verbose_name='Last Auto Backup')
+    
+    class Meta:
+        verbose_name = 'Backup Settings'
+        verbose_name_plural = 'Backup Settings'
+    
+    def __str__(self):
+        return 'Database Backup Settings'
+    
+    def save(self, *args, **kwargs):
+        self.pk = 1
+        super(BackupSettings, self).save(*args, **kwargs)
+    
+    @classmethod
+    def load(cls):
+        obj, created = cls.objects.get_or_create(pk=1)
+        return obj
+
+
+class DatabaseBackup(models.Model):
+    """Track database backup records"""
+    BACKUP_TYPES = [
+        ('full', 'Full Database'),
+        ('clients', 'Clients Data Only'),
+        ('settings', 'System Settings Only'),
+        ('custom', 'Custom Selection')
+    ]
+    
+    BACKUP_STATUS = [
+        ('pending', 'Pending'),
+        ('running', 'Running'),
+        ('completed', 'Completed'),
+        ('failed', 'Failed'),
+        ('cancelled', 'Cancelled')
+    ]
+    
+    backup_name = models.CharField(max_length=255, verbose_name='Backup Name')
+    backup_type = models.CharField(max_length=20, choices=BACKUP_TYPES, default='full', verbose_name='Backup Type')
+    status = models.CharField(max_length=20, choices=BACKUP_STATUS, default='pending', verbose_name='Status')
+    
+    # File information
+    file_path = models.CharField(max_length=500, blank=True, verbose_name='File Path')
+    file_size = models.BigIntegerField(default=0, verbose_name='File Size (bytes)')
+    compressed = models.BooleanField(default=False, verbose_name='Compressed')
+    
+    # Backup details
+    tables_included = models.TextField(blank=True, verbose_name='Tables Included')
+    records_count = models.IntegerField(default=0, verbose_name='Total Records')
+    
+    # Progress tracking
+    progress_percentage = models.IntegerField(default=0, verbose_name='Progress %')
+    current_operation = models.CharField(max_length=255, blank=True, verbose_name='Current Operation')
+    
+    # Timestamps
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name='Created At')
+    started_at = models.DateTimeField(null=True, blank=True, verbose_name='Started At')
+    completed_at = models.DateTimeField(null=True, blank=True, verbose_name='Completed At')
+    
+    # Error handling
+    error_message = models.TextField(blank=True, verbose_name='Error Message')
+    
+    # Metadata
+    created_by = models.CharField(max_length=100, blank=True, verbose_name='Created By')
+    description = models.TextField(blank=True, verbose_name='Description')
+    
+    class Meta:
+        verbose_name = 'Database Backup'
+        verbose_name_plural = 'Database Backups'
+        ordering = ['-created_at']
+    
+    def __str__(self):
+        return f"{self.backup_name} - {self.get_backup_type_display()}"
+    
+    def get_file_size_display(self):
+        """Return human readable file size"""
+        if self.file_size == 0:
+            return "0 B"
+        
+        size_names = ["B", "KB", "MB", "GB", "TB"]
+        import math
+        i = int(math.floor(math.log(self.file_size, 1024)))
+        p = math.pow(1024, i)
+        s = round(self.file_size / p, 2)
+        return f"{s} {size_names[i]}"
+    
+    def get_status_badge(self):
+        """Return HTML badge for status"""
+        from django.utils.html import format_html
+        
+        color_map = {
+            'pending': '#6c757d',
+            'running': '#ffc107',
+            'completed': '#28a745',
+            'failed': '#dc3545',
+            'cancelled': '#6c757d'
+        }
+        
+        color = color_map.get(self.status, '#6c757d')
+        return format_html(
+            '<span style="background-color: {}; color: white; padding: 3px 8px; border-radius: 3px; font-size: 12px; font-weight: bold;">{}</span>',
+            color, self.get_status_display()
+        )
+    
+    def get_backup_type_badge(self):
+        """Return HTML badge for backup type"""
+        from django.utils.html import format_html
+        
+        color_map = {
+            'full': '#007bff',
+            'clients': '#28a745',
+            'settings': '#ffc107',
+            'custom': '#17a2b8'
+        }
+        
+        color = color_map.get(self.backup_type, '#6c757d')
+        return format_html(
+            '<span style="background-color: {}; color: white; padding: 3px 8px; border-radius: 3px; font-size: 12px; font-weight: bold;">{}</span>',
+            color, self.get_backup_type_display()
+        )

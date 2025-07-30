@@ -2895,6 +2895,362 @@ class UpdateSettingsAdmin(Singleton):
         return JsonResponse({'status': 'error', 'message': 'Invalid request method'})
 
 
+class BackupSettingsAdmin(Singleton):
+    """Admin for backup settings configuration"""
+    fieldsets = (
+        ('Auto Backup Settings', {
+            'fields': ('Auto_Backup_Enabled', 'Auto_Backup_Interval_Hours', 'Max_Backup_Count', 'Backup_Location')
+        }),
+        ('Backup Content', {
+            'fields': ('Include_Client_Data', 'Include_System_Settings', 'Include_Logs')
+        }),
+        ('Storage & Retention', {
+            'fields': ('Compress_Backups', 'Retention_Days')
+        }),
+        ('Notifications', {
+            'fields': ('Email_Notifications', 'Email_Recipients')
+        }),
+        ('Status', {
+            'fields': ('Last_Auto_Backup',),
+            'classes': ('collapse',)
+        })
+    )
+    
+    readonly_fields = ('Last_Auto_Backup',)
+    
+    def changelist_view(self, request, extra_context=None):
+        return HttpResponseRedirect(reverse('admin:app_backupsettings_change', args=[1]))
+
+
+class DatabaseBackupAdmin(admin.ModelAdmin):
+    """Admin for database backup management"""
+    list_display = ('backup_name', 'backup_type_badge', 'status_badge', 'file_size_display', 'progress_bar', 'created_at', 'action_buttons')
+    list_filter = ('backup_type', 'status', 'compressed', 'created_at')
+    readonly_fields = ('file_path', 'file_size', 'tables_included', 'records_count', 'progress_percentage', 
+                      'current_operation', 'started_at', 'completed_at', 'error_message', 'created_at')
+    search_fields = ('backup_name', 'description', 'created_by')
+    ordering = ('-created_at',)
+    
+    fieldsets = (
+        ('Backup Information', {
+            'fields': ('backup_name', 'backup_type', 'description', 'status')
+        }),
+        ('File Details', {
+            'fields': ('file_path', 'file_size', 'compressed', 'tables_included', 'records_count')
+        }),
+        ('Progress', {
+            'fields': ('progress_percentage', 'current_operation'),
+            'classes': ('collapse',)
+        }),
+        ('Timestamps', {
+            'fields': ('created_at', 'started_at', 'completed_at'),
+            'classes': ('collapse',)
+        }),
+        ('Error Information', {
+            'fields': ('error_message',),
+            'classes': ('collapse',)
+        }),
+        ('Metadata', {
+            'fields': ('created_by',),
+            'classes': ('collapse',)
+        })
+    )
+    
+    def backup_type_badge(self, obj):
+        return obj.get_backup_type_badge()
+    backup_type_badge.short_description = 'Type'
+    
+    def status_badge(self, obj):
+        return obj.get_status_badge()
+    status_badge.short_description = 'Status'
+    
+    def file_size_display(self, obj):
+        return obj.get_file_size_display()
+    file_size_display.short_description = 'Size'
+    
+    def progress_bar(self, obj):
+        from django.utils.html import format_html
+        if obj.status == 'running':
+            color = 'warning'
+        elif obj.status == 'completed':
+            color = 'success'
+        elif obj.status == 'failed':
+            color = 'danger'
+        else:
+            color = 'secondary'
+            
+        return format_html(
+            '<div class="progress" style="width: 150px; height: 20px;">'
+            '<div class="progress-bar bg-{}" role="progressbar" style="width: {}%;" '
+            'aria-valuenow="{}" aria-valuemin="0" aria-valuemax="100">{}%</div>'
+            '</div>',
+            color, obj.progress_percentage, obj.progress_percentage, obj.progress_percentage
+        )
+    progress_bar.short_description = 'Progress'
+    
+    def action_buttons(self, obj):
+        from django.utils.html import format_html
+        buttons = []
+        
+        if obj.status == 'completed':
+            # Download button
+            buttons.append(format_html(
+                '<a class="button" href="#" onclick="downloadBackup({}); return false;" title="Download backup file" '
+                'style="background-color: #007bff; color: white; padding: 4px 8px; text-decoration: none; border-radius: 3px; margin: 1px; font-size: 11px; white-space: nowrap;">'
+                '<i class="fas fa-download" style="margin-right: 3px;"></i>Download</a>',
+                obj.pk
+            ))
+            
+            # Restore button
+            buttons.append(format_html(
+                '<a class="button" href="#" onclick="restoreBackup({}); return false;" title="Restore from backup" '
+                'style="background-color: #28a745; color: white; padding: 4px 8px; text-decoration: none; border-radius: 3px; margin: 1px; font-size: 11px; white-space: nowrap;">'
+                '<i class="fas fa-undo" style="margin-right: 3px;"></i>Restore</a>',
+                obj.pk
+            ))
+        
+        if obj.status in ['completed', 'failed']:
+            # Delete button
+            buttons.append(format_html(
+                '<a class="button" href="#" onclick="deleteBackup({}); return false;" title="Delete backup" '
+                'style="background-color: #dc3545; color: white; padding: 4px 8px; text-decoration: none; border-radius: 3px; margin: 1px; font-size: 11px; white-space: nowrap;">'
+                '<i class="fas fa-trash" style="margin-right: 3px;"></i>Delete</a>',
+                obj.pk
+            ))
+        
+        if obj.status == 'running':
+            # Cancel button
+            buttons.append(format_html(
+                '<a class="button" href="#" onclick="cancelBackup({}); return false;" title="Cancel backup" '
+                'style="background-color: #ffc107; color: black; padding: 4px 8px; text-decoration: none; border-radius: 3px; margin: 1px; font-size: 11px; white-space: nowrap;">'
+                '<i class="fas fa-times" style="margin-right: 3px;"></i>Cancel</a>',
+                obj.pk
+            ))
+        
+        return format_html(' '.join(str(button) for button in buttons))
+    action_buttons.short_description = 'Actions'
+    
+    def has_add_permission(self, request):
+        """Disable manual adding - backups are created through actions"""
+        return False
+    
+    def changelist_view(self, request, extra_context=None):
+        extra_context = extra_context or {}
+        
+        # Get backup statistics
+        from .services.database_backup_service import DatabaseBackupService
+        service = DatabaseBackupService()
+        stats = service.get_backup_statistics()
+        
+        extra_context.update({
+            'title': 'Database Backups',
+            'backup_stats': stats,
+            'has_add_permission': False,
+        })
+        
+        return super().changelist_view(request, extra_context=extra_context)
+    
+    def get_urls(self):
+        from django.urls import path
+        urls = super().get_urls()
+        custom_urls = [
+            path('create-backup/', self.admin_site.admin_view(self.create_backup_view), name='app_databasebackup_create'),
+            path('<int:pk>/download/', self.admin_site.admin_view(self.download_backup_view), name='app_databasebackup_download'),
+            path('<int:pk>/restore/', self.admin_site.admin_view(self.restore_backup_view), name='app_databasebackup_restore'),
+            path('<int:pk>/delete-backup/', self.admin_site.admin_view(self.delete_backup_view), name='app_databasebackup_delete'),
+            path('<int:pk>/cancel/', self.admin_site.admin_view(self.cancel_backup_view), name='app_databasebackup_cancel'),
+            path('<int:pk>/progress/', self.admin_site.admin_view(self.progress_view), name='app_databasebackup_progress'),
+        ]
+        return custom_urls + urls
+    
+    def create_backup_view(self, request):
+        from django.http import JsonResponse
+        from .services.database_backup_service import run_backup_async
+        from .models import DatabaseBackup
+        
+        if request.method == 'POST':
+            try:
+                import json
+                data = json.loads(request.body)
+                
+                backup_name = data.get('backup_name', f'Manual Backup {timezone.now().strftime("%Y-%m-%d %H:%M")}')
+                backup_type = data.get('backup_type', 'full')
+                description = data.get('description', '')
+                compressed = data.get('compressed', True)
+                
+                # Create backup record
+                backup = DatabaseBackup.objects.create(
+                    backup_name=backup_name,
+                    backup_type=backup_type,
+                    description=description,
+                    compressed=compressed,
+                    created_by=request.user.username if hasattr(request.user, 'username') else 'admin',
+                    status='pending'
+                )
+                
+                # Start backup asynchronously
+                run_backup_async(backup.id, backup_type)
+                
+                return JsonResponse({
+                    'status': 'success',
+                    'backup_id': backup.id,
+                    'message': f'Backup "{backup_name}" started successfully'
+                })
+                
+            except Exception as e:
+                return JsonResponse({
+                    'status': 'error',
+                    'message': str(e)
+                })
+        
+        return JsonResponse({'status': 'error', 'message': 'Invalid request method'})
+    
+    def download_backup_view(self, request, pk):
+        from django.http import HttpResponse, Http404
+        import os
+        
+        try:
+            backup = models.DatabaseBackup.objects.get(pk=pk)
+            
+            if not backup.file_path or not os.path.exists(backup.file_path):
+                raise Http404("Backup file not found")
+            
+            # Serve file for download
+            with open(backup.file_path, 'rb') as f:
+                response = HttpResponse(f.read(), content_type='application/octet-stream')
+                filename = os.path.basename(backup.file_path)
+                response['Content-Disposition'] = f'attachment; filename="{filename}"'
+                return response
+                
+        except models.DatabaseBackup.DoesNotExist:
+            raise Http404("Backup not found")
+    
+    def restore_backup_view(self, request, pk):
+        from django.http import JsonResponse
+        from .services.database_backup_service import run_restore_async
+        
+        if request.method == 'POST':
+            try:
+                backup = models.DatabaseBackup.objects.get(pk=pk)
+                
+                if backup.status != 'completed':
+                    return JsonResponse({
+                        'status': 'error',
+                        'message': 'Only completed backups can be restored'
+                    })
+                
+                # Start restore asynchronously
+                run_restore_async(backup.id)
+                
+                return JsonResponse({
+                    'status': 'success',
+                    'message': f'Restore of "{backup.backup_name}" started'
+                })
+                
+            except models.DatabaseBackup.DoesNotExist:
+                return JsonResponse({
+                    'status': 'error',
+                    'message': 'Backup not found'
+                })
+            except Exception as e:
+                return JsonResponse({
+                    'status': 'error',
+                    'message': str(e)
+                })
+        
+        return JsonResponse({'status': 'error', 'message': 'Invalid request method'})
+    
+    def delete_backup_view(self, request, pk):
+        from django.http import JsonResponse
+        import os
+        
+        if request.method == 'POST':
+            try:
+                backup = models.DatabaseBackup.objects.get(pk=pk)
+                
+                # Delete file if exists
+                if backup.file_path and os.path.exists(backup.file_path):
+                    os.remove(backup.file_path)
+                
+                backup_name = backup.backup_name
+                backup.delete()
+                
+                return JsonResponse({
+                    'status': 'success',
+                    'message': f'Backup "{backup_name}" deleted successfully'
+                })
+                
+            except models.DatabaseBackup.DoesNotExist:
+                return JsonResponse({
+                    'status': 'error',
+                    'message': 'Backup not found'
+                })
+            except Exception as e:
+                return JsonResponse({
+                    'status': 'error',
+                    'message': str(e)
+                })
+        
+        return JsonResponse({'status': 'error', 'message': 'Invalid request method'})
+    
+    def cancel_backup_view(self, request, pk):
+        from django.http import JsonResponse
+        
+        if request.method == 'POST':
+            try:
+                backup = models.DatabaseBackup.objects.get(pk=pk)
+                
+                if backup.status == 'running':
+                    backup.status = 'cancelled'
+                    backup.current_operation = 'Cancelled by user'
+                    backup.completed_at = timezone.now()
+                    backup.save()
+                    
+                    return JsonResponse({
+                        'status': 'success',
+                        'message': f'Backup "{backup.backup_name}" cancelled'
+                    })
+                else:
+                    return JsonResponse({
+                        'status': 'error',
+                        'message': 'Only running backups can be cancelled'
+                    })
+                
+            except models.DatabaseBackup.DoesNotExist:
+                return JsonResponse({
+                    'status': 'error',
+                    'message': 'Backup not found'
+                })
+        
+        return JsonResponse({'status': 'error', 'message': 'Invalid request method'})
+    
+    def progress_view(self, request, pk):
+        from django.http import JsonResponse
+        
+        try:
+            backup = models.DatabaseBackup.objects.get(pk=pk)
+            
+            return JsonResponse({
+                'status': 'success',
+                'backup_status': backup.status,
+                'progress': backup.progress_percentage,
+                'current_operation': backup.current_operation,
+                'error_message': backup.error_message
+            })
+            
+        except models.DatabaseBackup.DoesNotExist:
+            return JsonResponse({
+                'status': 'error',
+                'message': 'Backup not found'
+            })
+    
+    class Media:
+        js = ('admin/js/database_backup.js',)
+        css = {
+            'all': ('admin/css/database_backup.css',)
+        }
+
+
 # Replace the default admin site
 admin.site = PisoWifiAdminSite()
 admin.sites.site = admin.site
@@ -2925,3 +3281,5 @@ admin.site.register(models.AdaptiveQoSRule, AdaptiveQoSRuleAdmin)
 admin.site.register(models.NetworkIntelligence, NetworkIntelligenceAdmin)
 admin.site.register(models.SystemUpdate, SystemUpdateAdmin)
 admin.site.register(models.UpdateSettings, UpdateSettingsAdmin)
+admin.site.register(models.BackupSettings, BackupSettingsAdmin)
+admin.site.register(models.DatabaseBackup, DatabaseBackupAdmin)

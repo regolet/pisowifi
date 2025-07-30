@@ -1,0 +1,482 @@
+/* Database Backup Admin Styles */
+
+/* Backup Statistics Panel */
+.backup-stats-panel {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border-radius: 8px;
+    padding: 25px;
+    margin-bottom: 25px;
+    box-shadow: 0 4px 20px rgba(102, 126, 234, 0.2);
+}
+
+.backup-stats-panel h4 {
+    margin: 0 0 20px 0;
+    font-size: 1.4rem;
+    font-weight: 600;
+    color: white;
+}
+
+.backup-stats-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 25px;
+}
+
+.backup-stat-item {
+    text-align: center;
+    background: rgba(255, 255, 255, 0.1);
+    padding: 20px;
+    border-radius: 8px;
+    backdrop-filter: blur(10px);
+}
+
+.backup-stat-number {
+    font-size: 2.5rem;
+    font-weight: 700;
+    color: white;
+    display: block;
+    margin-bottom: 5px;
+}
+
+.backup-stat-label {
+    font-size: 0.9rem;
+    opacity: 0.9;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+/* Action Buttons */
+.backup-action-buttons .btn {
+    margin-right: 5px;
+    margin-bottom: 2px;
+    font-size: 11px;
+    padding: 4px 8px;
+    border-radius: 3px;
+    white-space: nowrap;
+    text-decoration: none;
+    display: inline-block;
+    text-align: center;
+    border: none;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.backup-action-buttons .btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.backup-action-buttons .btn i {
+    margin-right: 3px;
+}
+
+/* Progress Bars */
+.backup-progress {
+    background-color: #e9ecef;
+    border-radius: 4px;
+    overflow: hidden;
+    height: 20px;
+}
+
+.backup-progress-bar {
+    transition: width 0.3s ease;
+    font-size: 12px;
+    font-weight: 600;
+    text-align: center;
+    line-height: 20px;
+    color: white;
+}
+
+.backup-progress-bar.bg-success {
+    background: linear-gradient(45deg, #28a745, #20c997);
+}
+
+.backup-progress-bar.bg-warning {
+    background: linear-gradient(45deg, #ffc107, #fd7e14);
+}
+
+.backup-progress-bar.bg-danger {
+    background: linear-gradient(45deg, #dc3545, #e74c3c);
+}
+
+.backup-progress-bar.bg-info {
+    background: linear-gradient(45deg, #17a2b8, #007bff);
+}
+
+/* Status Badges */
+.backup-status-badge {
+    display: inline-block;
+    padding: 4px 10px;
+    border-radius: 15px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.backup-type-badge {
+    display: inline-block;
+    padding: 4px 10px;
+    border-radius: 15px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+/* Modals */
+.backup-modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.7);
+    z-index: 10000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.backup-modal-content {
+    background: white;
+    border-radius: 12px;
+    padding: 30px;
+    width: 500px;
+    max-width: 90vw;
+    max-height: 90vh;
+    overflow-y: auto;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+    animation: modalFadeIn 0.3s ease;
+}
+
+@keyframes modalFadeIn {
+    from {
+        opacity: 0;
+        transform: scale(0.9);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+.backup-modal h3 {
+    margin: 0 0 25px 0;
+    font-size: 1.5rem;
+    color: #333;
+    border-bottom: 2px solid #f0f0f0;
+    padding-bottom: 10px;
+}
+
+.backup-form-group {
+    margin-bottom: 20px;
+}
+
+.backup-form-group label {
+    display: block;
+    margin-bottom: 8px;
+    font-weight: 600;
+    color: #555;
+}
+
+.backup-form-group input,
+.backup-form-group textarea,
+.backup-form-group select {
+    width: 100%;
+    padding: 10px;
+    border: 2px solid #e1e5e9;
+    border-radius: 6px;
+    font-size: 14px;
+    transition: border-color 0.3s ease;
+}
+
+.backup-form-group input:focus,
+.backup-form-group textarea:focus,
+.backup-form-group select:focus {
+    outline: none;
+    border-color: #007bff;
+    box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.1);
+}
+
+.backup-form-group input[type="checkbox"] {
+    width: auto;
+    margin-right: 8px;
+}
+
+/* Custom Backup Dialog */
+.backup-checkbox-group {
+    display: flex;
+    align-items: center;
+    margin-bottom: 15px;
+}
+
+.backup-checkbox-group input[type="checkbox"] {
+    width: auto;
+    margin-right: 10px;
+    transform: scale(1.2);
+}
+
+.backup-checkbox-group label {
+    margin-bottom: 0;
+    cursor: pointer;
+}
+
+/* Button Groups */
+.backup-button-group {
+    display: flex;
+    gap: 12px;
+    justify-content: flex-end;
+    margin-top: 30px;
+}
+
+.backup-btn {
+    padding: 10px 20px;
+    border: none;
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    text-decoration: none;
+    display: inline-block;
+    text-align: center;
+}
+
+.backup-btn-primary {
+    background: linear-gradient(45deg, #007bff, #0056b3);
+    color: white;
+}
+
+.backup-btn-primary:hover {
+    background: linear-gradient(45deg, #0056b3, #003d82);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(0, 123, 255, 0.3);
+}
+
+.backup-btn-secondary {
+    background: #6c757d;
+    color: white;
+}
+
+.backup-btn-secondary:hover {
+    background: #545b62;
+}
+
+.backup-btn-success {
+    background: linear-gradient(45deg, #28a745, #20c997);
+    color: white;
+}
+
+.backup-btn-success:hover {
+    background: linear-gradient(45deg, #218838, #1a9b8e);
+}
+
+/* Progress Modal Specific */
+.backup-progress-modal {
+    background: rgba(0, 0, 0, 0.8);
+}
+
+.backup-progress-content {
+    width: 450px;
+    text-align: center;
+}
+
+.backup-progress-title {
+    font-size: 1.3rem;
+    margin-bottom: 25px;
+    color: #333;
+}
+
+.backup-progress-container {
+    background: #f8f9fa;
+    border-radius: 25px;
+    padding: 4px;
+    margin-bottom: 20px;
+}
+
+.backup-progress-bar-animated {
+    height: 30px;
+    border-radius: 20px;
+    background: linear-gradient(45deg, #007bff, #0056b3);
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 600;
+    transition: width 0.5s ease;
+    position: relative;
+    overflow: hidden;
+}
+
+.backup-progress-bar-animated::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
+    animation: progressShine 2s infinite;
+}
+
+@keyframes progressShine {
+    0% {
+        left: -100%;
+    }
+    100% {
+        left: 100%;
+    }
+}
+
+.backup-progress-operation {
+    color: #6c757d;
+    font-size: 0.9rem;
+    margin-bottom: 20px;
+    min-height: 20px;
+}
+
+/* Table Enhancements */
+.backup-table-actions {
+    white-space: nowrap;
+    min-width: 200px;
+}
+
+.backup-file-size {
+    font-family: 'Courier New', monospace;
+    color: #495057;
+    font-weight: 600;
+}
+
+.backup-created-date {
+    color: #6c757d;
+    font-size: 0.9rem;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .backup-stats-grid {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 15px;
+    }
+    
+    .backup-stat-number {
+        font-size: 2rem;
+    }
+    
+    .backup-modal-content {
+        padding: 20px;
+        margin: 20px;
+    }
+    
+    .backup-progress-content {
+        width: 350px;
+    }
+    
+    .backup-button-group {
+        flex-direction: column;
+    }
+    
+    .backup-action-buttons .btn {
+        font-size: 10px;
+        padding: 3px 6px;
+        margin-right: 3px;
+    }
+}
+
+@media (max-width: 576px) {
+    .backup-stats-grid {
+        grid-template-columns: 1fr;
+        gap: 12px;
+    }
+    
+    .backup-stats-panel {
+        padding: 20px;
+    }
+    
+    .backup-modal-content {
+        width: 95vw;
+        padding: 15px;
+    }
+    
+    .backup-progress-content {
+        width: 300px;
+    }
+}
+
+/* Loading States */
+.backup-loading {
+    opacity: 0.7;
+    pointer-events: none;
+    position: relative;
+}
+
+.backup-loading::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 20px;
+    height: 20px;
+    margin: -10px 0 0 -10px;
+    border: 2px solid transparent;
+    border-top-color: #007bff;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* Success/Error States */
+.backup-success {
+    border-left: 4px solid #28a745;
+    background-color: #d4edda;
+    padding: 10px;
+    margin: 10px 0;
+    border-radius: 4px;
+}
+
+.backup-error {
+    border-left: 4px solid #dc3545;
+    background-color: #f8d7da;
+    padding: 10px;
+    margin: 10px 0;
+    border-radius: 4px;
+}
+
+/* Tooltip Enhancements */
+.backup-tooltip {
+    position: relative;
+    cursor: help;
+}
+
+.backup-tooltip:hover::after {
+    content: attr(data-tooltip);
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #333;
+    color: white;
+    padding: 6px 10px;
+    border-radius: 4px;
+    font-size: 12px;
+    white-space: nowrap;
+    z-index: 1000;
+    margin-bottom: 5px;
+}
+
+.backup-tooltip:hover::before {
+    content: '';
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    border: 5px solid transparent;
+    border-top-color: #333;
+    z-index: 1000;
+}

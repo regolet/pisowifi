@@ -1,0 +1,133 @@
+{% extends "admin/change_list.html" %}
+{% load i18n admin_urls static admin_list %}
+
+{% block content_title %}{{ title }}{% endblock %}
+
+{% block extrahead %}
+    {{ block.super }}
+    <link rel="stylesheet" href="{% static 'admin/css/database_backup.css' %}">
+    <link rel="stylesheet" href="{% static 'vendors/fontawesome-free-5.1.0-web/css/all.css' %}">
+    <script src="{% static 'admin/js/database_backup.js' %}"></script>
+{% endblock %}
+
+{% block object-tools-items %}
+    {{ block.super }}
+    <li>
+        <a href="#" class="btn btn-success" id="create-full-backup-btn" onclick="createBackup('full'); return false;" 
+           style="background-color: #007bff; border-color: #007bff; color: white; padding: 8px 16px; border-radius: 4px; text-decoration: none; margin-left: 5px;">
+            <i class="fas fa-database" style="margin-right: 5px;"></i>Full Backup
+        </a>
+    </li>
+    <li>
+        <a href="#" class="btn btn-success" id="create-clients-backup-btn" onclick="createBackup('clients'); return false;" 
+           style="background-color: #28a745; border-color: #28a745; color: white; padding: 8px 16px; border-radius: 4px; text-decoration: none; margin-left: 5px;">
+            <i class="fas fa-users" style="margin-right: 5px;"></i>Clients Backup
+        </a>
+    </li>
+    <li>
+        <a href="#" class="btn btn-success" id="create-settings-backup-btn" onclick="createBackup('settings'); return false;" 
+           style="background-color: #ffc107; border-color: #ffc107; color: black; padding: 8px 16px; border-radius: 4px; text-decoration: none; margin-left: 5px;">
+            <i class="fas fa-cog" style="margin-right: 5px;"></i>Settings Backup
+        </a>
+    </li>
+    <li>
+        <a href="#" class="btn btn-success" id="create-custom-backup-btn" onclick="showCustomBackupDialog(); return false;" 
+           style="background-color: #17a2b8; border-color: #17a2b8; color: white; padding: 8px 16px; border-radius: 4px; text-decoration: none; margin-left: 5px;">
+            <i class="fas fa-plus" style="margin-right: 5px;"></i>Custom Backup
+        </a>
+    </li>
+{% endblock %}
+
+{% block content %}
+    {% if backup_stats %}
+    <div class="backup-stats-panel" style="background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 6px; padding: 20px; margin-bottom: 20px;">
+        <h4 style="margin: 0 0 15px 0; color: #495057;">Backup Statistics</h4>
+        <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px;">
+            <div style="text-align: center;">
+                <div style="font-size: 2rem; font-weight: 600; color: #007bff;">{{ backup_stats.total_backups }}</div>
+                <div style="font-size: 0.9rem; color: #6c757d;">Total Backups</div>
+            </div>
+            <div style="text-align: center;">
+                <div style="font-size: 2rem; font-weight: 600; color: #28a745;">{{ backup_stats.completed_backups }}</div>
+                <div style="font-size: 0.9rem; color: #6c757d;">Completed</div>
+            </div>
+            <div style="text-align: center;">
+                <div style="font-size: 2rem; font-weight: 600; color: #dc3545;">{{ backup_stats.failed_backups }}</div>
+                <div style="font-size: 0.9rem; color: #6c757d;">Failed</div>
+            </div>
+            <div style="text-align: center;">
+                <div style="font-size: 2rem; font-weight: 600; color: #6c757d;">{{ backup_stats.total_size_display }}</div>
+                <div style="font-size: 0.9rem; color: #6c757d;">Total Size</div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    {{ block.super }}
+
+    <!-- Custom Backup Dialog -->
+    <div id="custom-backup-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 10000;">
+        <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: white; border-radius: 8px; padding: 30px; width: 500px; max-width: 90vw;">
+            <h3 style="margin: 0 0 20px 0;">Create Custom Backup</h3>
+            
+            <form id="custom-backup-form">
+                <div style="margin-bottom: 15px;">
+                    <label style="display: block; margin-bottom: 5px; font-weight: 600;">Backup Name:</label>
+                    <input type="text" id="backup-name" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;" 
+                           placeholder="Enter backup name">
+                </div>
+                
+                <div style="margin-bottom: 15px;">
+                    <label style="display: block; margin-bottom: 5px; font-weight: 600;">Description:</label>
+                    <textarea id="backup-description" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; height: 80px;" 
+                              placeholder="Optional description"></textarea>
+                </div>
+                
+                <div style="margin-bottom: 15px;">
+                    <label style="display: inline-block; margin-bottom: 5px; font-weight: 600;">
+                        <input type="checkbox" id="compress-backup" checked style="margin-right: 8px;">
+                        Compress backup file
+                    </label>
+                </div>
+                
+                <div style="display: flex; gap: 15px; justify-content: flex-end; margin-top: 25px;">
+                    <button type="button" onclick="hideCustomBackupDialog()" 
+                            style="padding: 8px 20px; background: #6c757d; color: white; border: none; border-radius: 4px; cursor: pointer;">
+                        Cancel
+                    </button>
+                    <button type="button" onclick="createCustomBackup()" 
+                            style="padding: 8px 20px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer;">
+                        Create Backup
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Progress Modal -->
+    <div id="backup-progress-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 10001;">
+        <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: white; border-radius: 8px; padding: 30px; width: 400px; max-width: 90vw;">
+            <h3 style="margin: 0 0 20px 0;" id="progress-title">Creating Backup...</h3>
+            
+            <div style="margin-bottom: 15px;">
+                <div style="background: #e9ecef; border-radius: 4px; overflow: hidden; height: 25px;">
+                    <div id="backup-progress-bar" style="height: 100%; background: #007bff; width: 0%; transition: width 0.3s ease; display: flex; align-items: center; justify-content: center; color: white; font-size: 12px; font-weight: 600;">
+                        0%
+                    </div>
+                </div>
+            </div>
+            
+            <div style="margin-bottom: 20px;">
+                <small id="progress-operation" style="color: #6c757d;">Initializing...</small>
+            </div>
+            
+            <div style="text-align: center;" id="progress-actions">
+                <button type="button" onclick="hideProgressModal()" 
+                        style="padding: 8px 20px; background: #6c757d; color: white; border: none; border-radius: 4px; cursor: pointer; display: none;" 
+                        id="progress-close-btn">
+                    Close
+                </button>
+            </div>
+        </div>
+    </div>
+{% endblock %}
