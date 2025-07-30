@@ -3037,14 +3037,8 @@ class DatabaseBackupAdmin(admin.ModelAdmin):
     def changelist_view(self, request, extra_context=None):
         extra_context = extra_context or {}
         
-        # Get backup statistics
-        from .services.database_backup_service import DatabaseBackupService
-        service = DatabaseBackupService()
-        stats = service.get_backup_statistics()
-        
         extra_context.update({
             'title': 'Database Backups',
-            'backup_stats': stats,
             'has_add_permission': False,
         })
         

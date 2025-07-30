@@ -39,30 +39,6 @@
 {% endblock %}
 
 {% block content %}
-    {% if backup_stats %}
-    <div class="backup-stats-panel" style="background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 6px; padding: 20px; margin-bottom: 20px;">
-        <h4 style="margin: 0 0 15px 0; color: #495057;">Backup Statistics</h4>
-        <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px;">
-            <div style="text-align: center;">
-                <div style="font-size: 2rem; font-weight: 600; color: #007bff;">{{ backup_stats.total_backups }}</div>
-                <div style="font-size: 0.9rem; color: #6c757d;">Total Backups</div>
-            </div>
-            <div style="text-align: center;">
-                <div style="font-size: 2rem; font-weight: 600; color: #28a745;">{{ backup_stats.completed_backups }}</div>
-                <div style="font-size: 0.9rem; color: #6c757d;">Completed</div>
-            </div>
-            <div style="text-align: center;">
-                <div style="font-size: 2rem; font-weight: 600; color: #dc3545;">{{ backup_stats.failed_backups }}</div>
-                <div style="font-size: 0.9rem; color: #6c757d;">Failed</div>
-            </div>
-            <div style="text-align: center;">
-                <div style="font-size: 2rem; font-weight: 600; color: #6c757d;">{{ backup_stats.total_size_display }}</div>
-                <div style="font-size: 0.9rem; color: #6c757d;">Total Size</div>
-            </div>
-        </div>
-    </div>
-    {% endif %}
-
     {{ block.super }}
 
     <!-- Custom Backup Dialog -->
