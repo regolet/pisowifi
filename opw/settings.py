@@ -184,6 +184,11 @@ JAZZMIN_SETTINGS = {
         # System Update Models
         'app.SystemUpdate': 'fas fa-download',
         'app.UpdateSettings': 'fas fa-cogs',
+        
+        # Backup & VLAN Models
+        'app.BackupSettings': 'fas fa-archive',
+        'app.DatabaseBackup': 'fas fa-database',
+        'app.VLANSettings': 'fas fa-sitemap',
     },
     
     # Custom CSS and JS
