@@ -1,0 +1,51 @@
+{% extends "admin/change_form.html" %}
+{% load i18n admin_urls static admin_modify %}
+
+{% block content_title %}{{ title }}{% endblock %}
+
+{% block submit_buttons_bottom %}
+<div class="submit-row">
+    <input type="submit" value="{% trans 'Save and Apply' %}" class="default" name="_save" style="background-color: #007bff; border-color: #007bff;">
+    {% if show_save_and_add_another %}
+        <!-- Hide save and add another button -->
+    {% endif %}
+    {% if show_save_and_continue %}
+        <!-- Hide save and continue editing button -->
+    {% endif %}
+    {% if show_delete_link %}
+        <!-- Hide delete button -->
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block admin_change_form_document_ready %}
+    {{ block.super }}
+    <script>
+    (function($) {
+        // Hide unnecessary buttons and links
+        $('.deletelink').hide();
+        $('.historylink').hide();
+        $('.addlink').hide();
+        
+        // Update save button text and style
+        $('input[name="_save"]').val('Save and Apply Network Configuration');
+        $('input[name="_save"]').css({
+            'background-color': '#007bff',
+            'border-color': '#007bff',
+            'font-weight': 'bold'
+        });
+        
+        // Hide other save buttons if they exist
+        $('input[name="_addanother"]').hide();
+        $('input[name="_continue"]').hide();
+        
+        // Add confirmation for save action
+        $('form').on('submit', function(e) {
+            if (!confirm('Apply VLAN network configuration? This may temporarily disrupt network connectivity.')) {
+                e.preventDefault();
+                return false;
+            }
+        });
+    })(django.jQuery);
+    </script>
+{% endblock %}

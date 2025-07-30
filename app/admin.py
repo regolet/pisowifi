@@ -3273,35 +3273,7 @@ class VLANSettingsAdmin(Singleton):
         status_color = '#28a745' if 'Active' in obj.current_status else '#6c757d'
         
         return format_html(
-            '<div style="display: flex; align-items: center; gap: 10px;">'
-            '<span style="font-weight: bold; color: {};">{}</span>'
-            '<a href="#" onclick="applyNetworkMode(); return false;" '
-            'style="background-color: #007bff; color: white; padding: 4px 8px; text-decoration: none; border-radius: 3px; font-size: 11px;">'
-            '<i class="fas fa-play" style="margin-right: 3px;"></i>Apply Mode</a>'
-            '</div>'
-            '<script>'
-            'function applyNetworkMode() {{'
-            '    if (confirm("Apply the current network mode configuration? This will restart network services.")) {{'
-            '        fetch("/admin/app/vlansettings/apply-mode/", {{'
-            '            method: "POST",'
-            '            headers: {{'
-            '                "X-CSRFToken": document.querySelector("[name=csrfmiddlewaretoken]").value,'
-            '                "Content-Type": "application/json"'
-            '            }}'
-            '        }})'
-            '.then(response => response.json())'
-            '.then(data => {{'
-            '            if (data.status === "success") {{'
-            '                alert("Network mode applied successfully: " + data.message);'
-            '                location.reload();'
-            '            }} else {{'
-            '                alert("Error: " + data.message);'
-            '            }}'
-            '        }})'
-            '.catch(error => alert("Network error: " + error));'
-            '    }}'
-            '}}'
-            '</script>',
+            '<span style="font-weight: bold; color: {};">{}</span>',
             status_color,
             obj.current_status
         )
@@ -3310,59 +3282,57 @@ class VLANSettingsAdmin(Singleton):
     def changelist_view(self, request, extra_context=None):
         return HttpResponseRedirect(reverse('admin:app_vlansettings_change', args=[1]))
     
-    def get_urls(self):
-        from django.urls import path
-        urls = super().get_urls()
-        custom_urls = [
-            path('apply-mode/', self.admin_site.admin_view(self.apply_mode_view), name='app_vlansettings_apply_mode'),
-        ]
-        return custom_urls + urls
+    def has_add_permission(self, request):
+        return False  # Singleton - no add permission
     
-    def apply_mode_view(self, request):
-        from django.http import JsonResponse
-        from app.services.network_service import NetworkConfigurationService
-        
-        if request.method == 'POST':
-            try:
-                vlan_settings = models.VLANSettings.load()
-                service = NetworkConfigurationService()
-                
-                # Apply network configuration
-                success, message = service.apply_network_mode(vlan_settings)
-                
-                if success:
-                    # Schedule system restart if auto_restart is enabled
-                    if vlan_settings.auto_restart_on_change:
-                        service.restart_system()
-                        return JsonResponse({
-                            'status': 'success',
-                            'message': f'{message}. System will restart in 1 minute.',
-                            'restart': True
-                        })
-                    else:
-                        return JsonResponse({
-                            'status': 'success',
-                            'message': f'{message}. Manual restart required.',
-                            'restart': False
-                        })
-                else:
-                    return JsonResponse({
-                        'status': 'error',
-                        'message': message
-                    })
-                    
-            except Exception as e:
-                return JsonResponse({
-                    'status': 'error',
-                    'message': str(e)
-                })
-        
-        return JsonResponse({'status': 'error', 'message': 'Invalid request method'})
+    def has_delete_permission(self, request, obj=None):
+        return False  # Singleton - no delete permission
+    
+    def response_change(self, request, obj):
+        """Override to remove save and add another, save and continue editing buttons"""
+        # Always redirect back to the same change page after save
+        return HttpResponseRedirect(reverse('admin:app_vlansettings_change', args=[obj.pk]))
     
     def save_model(self, request, obj, form, change):
         from django.contrib import messages
-        messages.add_message(request, messages.INFO, 'VLAN Settings updated successfully. Click "Apply Mode" to activate changes.')
+        from app.services.network_service import NetworkConfigurationService
+        
+        # Save the model first
         super().save_model(request, obj, form, change)
+        
+        try:
+            # Apply network configuration immediately after save
+            service = NetworkConfigurationService()
+            success, message = service.apply_network_mode(obj)
+            
+            if success:
+                if obj.auto_restart_on_change:
+                    messages.add_message(
+                        request, 
+                        messages.SUCCESS, 
+                        f'VLAN Settings saved and applied successfully. {message}. System will restart in 1 minute to activate changes.'
+                    )
+                    # Schedule system restart
+                    service.restart_system()
+                else:
+                    messages.add_message(
+                        request, 
+                        messages.SUCCESS, 
+                        f'VLAN Settings saved and applied successfully. {message}. Manual restart recommended.'
+                    )
+            else:
+                messages.add_message(
+                    request, 
+                    messages.ERROR, 
+                    f'VLAN Settings saved but failed to apply network configuration: {message}'
+                )
+                
+        except Exception as e:
+            messages.add_message(
+                request, 
+                messages.ERROR, 
+                f'VLAN Settings saved but error applying configuration: {str(e)}'
+            )
     
     class Media:
         js = ('admin/js/vlan_settings.js',)
