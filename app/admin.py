@@ -1448,9 +1448,9 @@ class PisoWifiAdminSite(admin.AdminSite):
             }
 
 class SystemUpdateAdmin(admin.ModelAdmin):
-    list_display = ('Version_Number', 'Update_Title', 'Status', 'progress_bar', 'Release_Date', 'action_buttons')
+    list_display = ('version_display', 'Update_Title', 'Status', 'progress_bar', 'Release_Date', 'action_buttons')
     list_filter = ('Status', 'Is_Auto_Update', 'Force_Update')
-    readonly_fields = ('Progress', 'Downloaded_Bytes', 'Started_At', 'Completed_At', 'Error_Message', 'Backup_Path', 'Created_At', 'Updated_At')
+    readonly_fields = ('Progress', 'Downloaded_Bytes', 'Started_At', 'Completed_At', 'Error_Message', 'Backup_Path', 'Installation_Log', 'Created_At', 'Updated_At')
     search_fields = ('Version_Number', 'Update_Title', 'Description')
     
     fieldsets = (
@@ -1465,7 +1465,7 @@ class SystemUpdateAdmin(admin.ModelAdmin):
             'fields': ('Is_Auto_Update', 'Force_Update', 'Backup_Path')
         }),
         ('Timestamps & Errors', {
-            'fields': ('Started_At', 'Completed_At', 'Error_Message', 'Created_At', 'Updated_At'),
+            'fields': ('Started_At', 'Completed_At', 'Error_Message', 'Installation_Log', 'Created_At', 'Updated_At'),
             'classes': ('collapse',)
         })
     )
@@ -1487,28 +1487,107 @@ class SystemUpdateAdmin(admin.ModelAdmin):
         return self.progress_bar(obj)
     progress_bar_display.short_description = 'Download Progress'
     
+    def version_display(self, obj):
+        from django.utils.html import format_html
+        from app.models import UpdateSettings
+        
+        # Get current version
+        current_version = UpdateSettings.load().Current_Version
+        version_html = obj.Version_Number
+        
+        # Add indicator if this is the current version
+        if obj.Version_Number == current_version:
+            version_html = format_html(
+                '<span class="current-version-badge">{}</span> <span class="current-version-label">CURRENT</span>',
+                obj.Version_Number
+            )
+        elif obj.Status == 'completed':
+            # This version was installed but not current (rolled back?)
+            version_html = format_html(
+                '<span class="installed-version-badge">{}</span> <span class="installed-version-label">INSTALLED</span>',
+                obj.Version_Number
+            )
+        elif self._is_newer_version(obj.Version_Number, current_version):
+            # This is a newer version available
+            version_html = format_html(
+                '<span class="newer-version-badge">{}</span> <span class="newer-version-label">NEWER</span>',
+                obj.Version_Number
+            )
+        
+        return version_html
+    version_display.short_description = 'Version'
+    version_display.admin_order_field = 'Version_Number'
+    
+    def _is_newer_version(self, version1, version2):
+        """Check if version1 is newer than version2"""
+        try:
+            v1_parts = [int(x) for x in version1.split('.')]
+            v2_parts = [int(x) for x in version2.split('.')]
+            
+            max_len = max(len(v1_parts), len(v2_parts))
+            v1_parts.extend([0] * (max_len - len(v1_parts)))
+            v2_parts.extend([0] * (max_len - len(v2_parts)))
+            
+            return v1_parts > v2_parts
+        except ValueError:
+            return version1 > version2
+    
     def action_buttons(self, obj):
         from django.utils.html import format_html
         buttons = []
         
         if obj.Status == 'available':
             buttons.append(format_html(
-                '<a class="btn btn-sm btn-primary" href="#" onclick="startDownload({}); return false;">Download</a>',
+                '<a class="btn btn-sm btn-primary" href="#" onclick="startDownload({}); return false;" title="Download update">Download</a>',
+                obj.pk
+            ))
+            buttons.append(format_html(
+                '<a class="btn btn-sm btn-outline-danger" href="#" onclick="removeUpdate({}); return false;" title="Remove update">Remove</a>',
                 obj.pk
             ))
         elif obj.Status == 'downloading':
             buttons.append(format_html(
-                '<a class="btn btn-sm btn-warning" href="#" onclick="pauseDownload({}); return false;">Pause</a>',
+                '<a class="btn btn-sm btn-warning" href="#" onclick="pauseDownload({}); return false;" title="Pause download">Pause</a>',
+                obj.pk
+            ))
+            buttons.append(format_html(
+                '<a class="btn btn-sm btn-outline-danger" href="#" onclick="removeUpdate({}); return false;" title="Cancel and remove">Remove</a>',
                 obj.pk
             ))
         elif obj.Status == 'ready':
             buttons.append(format_html(
-                '<a class="btn btn-sm btn-success" href="#" onclick="installUpdate({}); return false;">Install</a>',
+                '<a class="btn btn-sm btn-success" href="#" onclick="installUpdate({}); return false;" title="Install update">Install</a>',
                 obj.pk
             ))
-        elif obj.Status == 'completed' and obj.can_rollback():
             buttons.append(format_html(
-                '<a class="btn btn-sm btn-danger" href="#" onclick="rollbackUpdate({}); return false;">Rollback</a>',
+                '<a class="btn btn-sm btn-outline-danger" href="#" onclick="removeUpdate({}); return false;" title="Remove update">Remove</a>',
+                obj.pk
+            ))
+        elif obj.Status == 'completed':
+            if obj.can_rollback():
+                buttons.append(format_html(
+                    '<a class="btn btn-sm btn-warning" href="#" onclick="rollbackUpdate({}); return false;" title="Rollback to previous version">Rollback</a>',
+                    obj.pk
+                ))
+            buttons.append(format_html(
+                '<a class="btn btn-sm btn-info" href="#" onclick="repairUpdate({}); return false;" title="Repair installation">Repair</a>',
+                obj.pk
+            ))
+            buttons.append(format_html(
+                '<a class="btn btn-sm btn-outline-danger" href="#" onclick="removeUpdate({}); return false;" title="Remove update record">Remove</a>',
+                obj.pk
+            ))
+        elif obj.Status == 'failed':
+            buttons.append(format_html(
+                '<a class="btn btn-sm btn-primary" href="#" onclick="retryUpdate({}); return false;" title="Retry installation">Retry</a>',
+                obj.pk
+            ))
+            buttons.append(format_html(
+                '<a class="btn btn-sm btn-info" href="#" onclick="repairUpdate({}); return false;" title="Repair installation">Repair</a>',
+                obj.pk
+            ))
+            buttons.append(format_html(
+                '<a class="btn btn-sm btn-outline-danger" href="#" onclick="removeUpdate({}); return false;" title="Remove update">Remove</a>',
                 obj.pk
             ))
         
@@ -1531,6 +1610,7 @@ class SystemUpdateAdmin(admin.ModelAdmin):
         
         return super().changelist_view(request, extra_context=extra_context)
     
+    
     def has_add_permission(self, request):
         """Disable manual adding of updates - they come from GitHub"""
         return False
@@ -1545,6 +1625,10 @@ class SystemUpdateAdmin(admin.ModelAdmin):
             path('<int:pk>/rollback/', self.admin_site.admin_view(self.rollback_update_view), name='app_systemupdate_rollback'),
             path('<int:pk>/progress/', self.admin_site.admin_view(self.progress_view), name='app_systemupdate_progress'),
             path('<int:pk>/install-progress/', self.admin_site.admin_view(self.install_progress_view), name='app_systemupdate_install_progress'),
+            path('<int:pk>/installation-logs/', self.admin_site.admin_view(self.installation_logs_view), name='app_systemupdate_installation_logs'),
+            path('<int:pk>/remove/', self.admin_site.admin_view(self.remove_update_view), name='app_systemupdate_remove'),
+            path('<int:pk>/repair/', self.admin_site.admin_view(self.repair_update_view), name='app_systemupdate_repair'),
+            path('<int:pk>/retry/', self.admin_site.admin_view(self.retry_update_view), name='app_systemupdate_retry'),
         ]
         return custom_urls + urls
     
@@ -1568,14 +1652,28 @@ class SystemUpdateAdmin(admin.ModelAdmin):
         from django.http import JsonResponse
         from app.services.update_service import UpdateDownloadService
         import threading
+        import logging
+        logger = logging.getLogger(__name__)
         
         try:
             update = models.SystemUpdate.objects.get(pk=pk)
             
             # Start download in background thread
             def download_in_background():
-                service = UpdateDownloadService(update)
-                service.download_update()
+                try:
+                    # Refresh the update object from database
+                    fresh_update = models.SystemUpdate.objects.get(pk=pk)
+                    service = UpdateDownloadService(fresh_update)
+                    service.download_update()
+                except Exception as e:
+                    logger.error(f"Background download error: {e}")
+                    try:
+                        error_update = models.SystemUpdate.objects.get(pk=pk)
+                        error_update.Status = 'failed'
+                        error_update.Error_Message = str(e)
+                        error_update.save(update_fields=['Status', 'Error_Message'])
+                    except:
+                        pass
             
             thread = threading.Thread(target=download_in_background)
             thread.daemon = True
@@ -1585,12 +1683,15 @@ class SystemUpdateAdmin(admin.ModelAdmin):
         except models.SystemUpdate.DoesNotExist:
             return JsonResponse({'status': 'error', 'message': 'Update not found'})
         except Exception as e:
+            logger.error(f"Error in download_update_view: {e}")
             return JsonResponse({'status': 'error', 'message': str(e)})
     
     def install_update_view(self, request, pk):
         from django.http import JsonResponse
         from app.services.update_service import UpdateInstallService
         import threading
+        import logging
+        logger = logging.getLogger(__name__)
         
         try:
             update = models.SystemUpdate.objects.get(pk=pk)
@@ -1600,8 +1701,20 @@ class SystemUpdateAdmin(admin.ModelAdmin):
             
             # Start installation in background thread
             def install_in_background():
-                service = UpdateInstallService(update)
-                service.install_update()
+                try:
+                    # Refresh the update object from database
+                    fresh_update = models.SystemUpdate.objects.get(pk=pk)
+                    service = UpdateInstallService(fresh_update)
+                    service.install_update()
+                except Exception as e:
+                    logger.error(f"Background installation error: {e}")
+                    try:
+                        error_update = models.SystemUpdate.objects.get(pk=pk)
+                        error_update.Status = 'failed'
+                        error_update.Error_Message = str(e)
+                        error_update.save(update_fields=['Status', 'Error_Message'])
+                    except:
+                        pass
             
             thread = threading.Thread(target=install_in_background)
             thread.daemon = True
@@ -1611,6 +1724,7 @@ class SystemUpdateAdmin(admin.ModelAdmin):
         except models.SystemUpdate.DoesNotExist:
             return JsonResponse({'status': 'error', 'message': 'Update not found'})
         except Exception as e:
+            logger.error(f"Error in install_update_view: {e}")
             return JsonResponse({'status': 'error', 'message': str(e)})
     
     def rollback_update_view(self, request, pk):
@@ -1630,6 +1744,8 @@ class SystemUpdateAdmin(admin.ModelAdmin):
     
     def progress_view(self, request, pk):
         from django.http import JsonResponse
+        import logging
+        logger = logging.getLogger(__name__)
         
         try:
             update = models.SystemUpdate.objects.get(pk=pk)
@@ -1642,9 +1758,21 @@ class SystemUpdateAdmin(admin.ModelAdmin):
             })
         except models.SystemUpdate.DoesNotExist:
             return JsonResponse({'status': 'error', 'message': 'Update not found'})
+        except Exception as e:
+            logger.error(f"Error in progress_view: {e}")
+            return JsonResponse({
+                'status': 'error', 
+                'message': f'Server error: {str(e)}',
+                'progress': 0,
+                'downloaded_bytes': 0,
+                'file_size': 0,
+                'error': str(e)
+            })
     
     def install_progress_view(self, request, pk):
         from django.http import JsonResponse
+        import logging
+        logger = logging.getLogger(__name__)
         
         try:
             update = models.SystemUpdate.objects.get(pk=pk)
@@ -1655,6 +1783,198 @@ class SystemUpdateAdmin(admin.ModelAdmin):
             })
         except models.SystemUpdate.DoesNotExist:
             return JsonResponse({'status': 'error', 'message': 'Update not found'})
+        except Exception as e:
+            logger.error(f"Error in install_progress_view: {e}")
+            return JsonResponse({
+                'status': 'error', 
+                'message': f'Server error: {str(e)}',
+                'progress': 0
+            })
+    
+    def installation_logs_view(self, request, pk):
+        from django.http import JsonResponse
+        import logging
+        logger = logging.getLogger(__name__)
+        
+        try:
+            update = models.SystemUpdate.objects.get(pk=pk)
+            return JsonResponse({
+                'status': 'success',
+                'logs': update.Installation_Log or ''
+            })
+        except models.SystemUpdate.DoesNotExist:
+            return JsonResponse({'status': 'error', 'message': 'Update not found'})
+        except Exception as e:
+            logger.error(f"Error in installation_logs_view: {e}")
+            return JsonResponse({
+                'status': 'error', 
+                'message': f'Server error: {str(e)}',
+                'logs': ''
+            })
+    
+    def remove_update_view(self, request, pk):
+        from django.http import JsonResponse
+        import logging
+        import os
+        from django.conf import settings
+        logger = logging.getLogger(__name__)
+        
+        try:
+            update = models.SystemUpdate.objects.get(pk=pk)
+            
+            # Clean up downloaded files
+            temp_path = os.path.join(settings.BASE_DIR, 'temp', 'updates')
+            update_file = os.path.join(temp_path, f"update_{update.Version_Number}.zip")
+            extract_path = os.path.join(temp_path, f"extracted_{update.Version_Number}")
+            
+            # Remove files if they exist
+            if os.path.exists(update_file):
+                os.remove(update_file)
+                logger.info(f"Removed update file: {update_file}")
+            
+            if os.path.exists(extract_path):
+                import shutil
+                shutil.rmtree(extract_path)
+                logger.info(f"Removed extracted directory: {extract_path}")
+            
+            # Remove the update record
+            version_number = update.Version_Number
+            update.delete()
+            
+            return JsonResponse({
+                'status': 'success', 
+                'message': f'Update {version_number} removed successfully'
+            })
+            
+        except models.SystemUpdate.DoesNotExist:
+            return JsonResponse({'status': 'error', 'message': 'Update not found'})
+        except Exception as e:
+            logger.error(f"Error in remove_update_view: {e}")
+            return JsonResponse({
+                'status': 'error', 
+                'message': f'Failed to remove update: {str(e)}'
+            })
+    
+    def repair_update_view(self, request, pk):
+        from django.http import JsonResponse
+        from app.services.update_service import UpdateInstallService
+        import threading
+        import logging
+        logger = logging.getLogger(__name__)
+        
+        try:
+            update = models.SystemUpdate.objects.get(pk=pk)
+            
+            if update.Status not in ['completed', 'failed']:
+                return JsonResponse({
+                    'status': 'error', 
+                    'message': 'Update repair only available for completed or failed updates'
+                })
+            
+            # Start repair in background thread
+            def repair_in_background():
+                try:
+                    fresh_update = models.SystemUpdate.objects.get(pk=pk)
+                    service = UpdateInstallService(fresh_update)
+                    
+                    # Use the dedicated repair method
+                    service.repair_installation()
+                    
+                except Exception as e:
+                    logger.error(f"Background repair error: {e}")
+                    try:
+                        error_update = models.SystemUpdate.objects.get(pk=pk)
+                        error_update.Status = 'failed'
+                        error_update.Error_Message = f"Repair failed: {str(e)}"
+                        error_update.save()
+                    except:
+                        pass
+            
+            thread = threading.Thread(target=repair_in_background)
+            thread.daemon = True
+            thread.start()
+            
+            return JsonResponse({
+                'status': 'success', 
+                'message': 'Update repair started'
+            })
+            
+        except models.SystemUpdate.DoesNotExist:
+            return JsonResponse({'status': 'error', 'message': 'Update not found'})
+        except Exception as e:
+            logger.error(f"Error in repair_update_view: {e}")
+            return JsonResponse({
+                'status': 'error', 
+                'message': f'Failed to start repair: {str(e)}'
+            })
+    
+    def retry_update_view(self, request, pk):
+        from django.http import JsonResponse
+        from app.services.update_service import UpdateInstallService
+        import threading
+        import logging
+        logger = logging.getLogger(__name__)
+        
+        try:
+            update = models.SystemUpdate.objects.get(pk=pk)
+            
+            if update.Status != 'failed':
+                return JsonResponse({
+                    'status': 'error', 
+                    'message': 'Retry only available for failed updates'
+                })
+            
+            # Check if we need to download first or can directly install
+            if not update.can_install():
+                # Need to download first
+                return JsonResponse({
+                    'status': 'error', 
+                    'message': 'Update needs to be downloaded first'
+                })
+            
+            # Start retry in background thread
+            def retry_in_background():
+                try:
+                    fresh_update = models.SystemUpdate.objects.get(pk=pk)
+                    service = UpdateInstallService(fresh_update)
+                    
+                    # Reset status and clear previous errors
+                    fresh_update.Status = 'installing'
+                    fresh_update.Progress = 0
+                    fresh_update.Error_Message = None
+                    fresh_update.Installation_Log = None
+                    fresh_update.save()
+                    
+                    # Retry installation
+                    service.install_update()
+                    
+                except Exception as e:
+                    logger.error(f"Background retry error: {e}")
+                    try:
+                        error_update = models.SystemUpdate.objects.get(pk=pk)
+                        error_update.Status = 'failed'
+                        error_update.Error_Message = str(e)
+                        error_update.save()
+                    except:
+                        pass
+            
+            thread = threading.Thread(target=retry_in_background)
+            thread.daemon = True
+            thread.start()
+            
+            return JsonResponse({
+                'status': 'success', 
+                'message': 'Update retry started'
+            })
+            
+        except models.SystemUpdate.DoesNotExist:
+            return JsonResponse({'status': 'error', 'message': 'Update not found'})
+        except Exception as e:
+            logger.error(f"Error in retry_update_view: {e}")
+            return JsonResponse({
+                'status': 'error', 
+                'message': f'Failed to retry update: {str(e)}'
+            })
 
 
 class UpdateSettingsAdmin(Singleton):

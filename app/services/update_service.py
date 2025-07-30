@@ -195,6 +195,19 @@ class UpdateInstallService:
         self.update = system_update
         self.backup_path = os.path.join(settings.BASE_DIR, 'backups')
         self.temp_path = os.path.join(settings.BASE_DIR, 'temp', 'updates')
+        self.installation_log = []
+    
+    def _log(self, message, level='INFO'):
+        timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        log_entry = f"[{timestamp}] [{level}] {message}"
+        self.installation_log.append(log_entry)
+        logger.info(log_entry)
+        try:
+            if hasattr(self.update, 'Installation_Log'):
+                self.update.Installation_Log = '\n'.join(self.installation_log)
+                self.update.save(update_fields=['Installation_Log'])
+        except Exception as e:
+            logger.warning(f"Failed to save installation log: {e}")
         
     def create_backup(self):
         """Create backup of current system"""
@@ -233,23 +246,28 @@ class UpdateInstallService:
     def install_update(self):
         """Install the downloaded update"""
         try:
+            self._log("Starting installation process")
             self.update.Status = 'installing'
             self.update.Progress = 0
             self.update.save()
             
             # Create backup if enabled
             if UpdateSettings.load().Backup_Before_Update:
+                self._log("Creating system backup before update")
                 backup_path = self.create_backup()
                 self.update.Backup_Path = backup_path
                 self.update.Progress = 20
                 self.update.save()
+                self._log(f"Backup created at: {backup_path}")
             
             # Extract update
+            self._log("Extracting update files")
             update_file = os.path.join(self.temp_path, f"update_{self.update.Version_Number}.zip")
             extract_path = os.path.join(self.temp_path, f"extracted_{self.update.Version_Number}")
             
             with zipfile.ZipFile(update_file, 'r') as zip_ref:
                 zip_ref.extractall(extract_path)
+                self._log(f"Extracted {len(zip_ref.namelist())} files")
             
             self.update.Progress = 50
             self.update.save()
@@ -260,29 +278,35 @@ class UpdateInstallService:
                 raise Exception("No extracted directory found")
             
             source_dir = os.path.join(extract_path, extracted_dirs[0])
+            self._log(f"Found source directory: {extracted_dirs[0]}")
             
             # Copy files to project directory
+            self._log("Copying update files to project directory")
             self._copy_update_files(source_dir)
             
             self.update.Progress = 80
             self.update.save()
             
             # Run post-install tasks
+            self._log("Running post-installation tasks")
             self._run_post_install_tasks()
             
             self.update.Status = 'completed'
             self.update.Progress = 100
             self.update.Completed_At = timezone.now()
             self.update.save()
+            self._log("Installation completed successfully")
             
             # Update current version
             settings_obj = UpdateSettings.load()
             settings_obj.Current_Version = self.update.Version_Number
             settings_obj.save()
+            self._log(f"System version updated to {self.update.Version_Number}")
             
             return {'status': 'success'}
             
         except Exception as e:
+            self._log(f"Installation failed: {str(e)}", "ERROR")
             self.update.Status = 'failed'
             self.update.Error_Message = str(e)
             self.update.save()
@@ -304,6 +328,7 @@ class UpdateInstallService:
             'static/background/'
         ]
         
+        copied_files = 0
         for root, dirs, files in os.walk(source_dir):
             # Skip excluded directories
             dirs[:] = [d for d in dirs if not any(d.startswith(pattern.rstrip('/*')) for pattern in exclude_patterns)]
@@ -322,23 +347,119 @@ class UpdateInstallService:
                 
                 # Copy file
                 shutil.copy2(src_file, dst_file)
+                copied_files += 1
+        
+        self._log(f"Copied {copied_files} files to project directory")
     
     def _run_post_install_tasks(self):
         """Run post-installation tasks"""
         try:
             # Run database migrations
-            subprocess.run([
+            self._log("Running database migrations")
+            result = subprocess.run([
                 'python', 'manage.py', 'migrate'
-            ], cwd=settings.BASE_DIR, check=True, capture_output=True)
+            ], cwd=settings.BASE_DIR, check=True, capture_output=True, text=True)
+            self._log("Database migrations completed successfully")
             
             # Collect static files
-            subprocess.run([
+            self._log("Collecting static files")
+            result = subprocess.run([
                 'python', 'manage.py', 'collectstatic', '--noinput'
-            ], cwd=settings.BASE_DIR, check=True, capture_output=True)
+            ], cwd=settings.BASE_DIR, check=True, capture_output=True, text=True)
+            self._log("Static files collection completed")
+            
+            # Check system integrity
+            self._log("Checking system integrity")
+            self._check_system_integrity()
             
         except subprocess.CalledProcessError as e:
+            self._log(f"Post-install task failed: {e}", "WARNING")
             logger.warning(f"Post-install task failed: {e}")
             # Don't fail the entire update for post-install issues
+    
+    def _check_system_integrity(self):
+        """Check system integrity after installation"""
+        try:
+            # Check if critical files exist
+            critical_files = [
+                'manage.py',
+                'app/models.py',
+                'app/admin.py', 
+                'app/urls.py',
+                'app/views.py'
+            ]
+            
+            for file_path in critical_files:
+                full_path = os.path.join(settings.BASE_DIR, file_path)
+                if not os.path.exists(full_path):
+                    self._log(f"Warning: Critical file missing: {file_path}", "WARNING")
+                else:
+                    self._log(f"Verified: {file_path}")
+            
+            # Check if database is accessible
+            from django.db import connection
+            with connection.cursor() as cursor:
+                cursor.execute("SELECT 1")
+                self._log("Database connectivity verified")
+                
+        except Exception as e:
+            self._log(f"System integrity check warning: {e}", "WARNING")
+    
+    def repair_installation(self):
+        """Repair installation issues"""
+        try:
+            self._log("Starting repair process")
+            self.update.Status = 'installing'
+            self.update.Progress = 0
+            self.update.Error_Message = None
+            self.update.save()
+            
+            # Clear any corrupted installation logs
+            self.installation_log = []
+            
+            # Run repair tasks
+            self._log("Running repair tasks")
+            self._run_post_install_tasks()
+            
+            # Fix file permissions if needed
+            self._log("Checking file permissions")
+            self._fix_file_permissions()
+            
+            # Update status
+            self.update.Status = 'completed'
+            self.update.Progress = 100
+            self.update.save()
+            self._log("Repair completed successfully")
+            
+            return {'status': 'success'}
+            
+        except Exception as e:
+            self._log(f"Repair failed: {str(e)}", "ERROR")
+            self.update.Status = 'failed'
+            self.update.Error_Message = f"Repair failed: {str(e)}"
+            self.update.save()
+            return {'status': 'error', 'message': str(e)}
+    
+    def _fix_file_permissions(self):
+        """Fix file permissions if needed"""
+        try:
+            import stat
+            
+            # Files that need execute permissions
+            executable_files = [
+                'manage.py'
+            ]
+            
+            for file_path in executable_files:
+                full_path = os.path.join(settings.BASE_DIR, file_path)
+                if os.path.exists(full_path):
+                    # Add execute permission for owner
+                    current_permissions = stat.S_IMODE(os.lstat(full_path).st_mode)
+                    os.chmod(full_path, current_permissions | stat.S_IXUSR)
+                    self._log(f"Fixed permissions for: {file_path}")
+                    
+        except Exception as e:
+            self._log(f"Permission fix warning: {e}", "WARNING")
     
     def rollback_update(self):
         """Rollback to previous version"""

@@ -36,6 +36,8 @@ function checkForUpdates() {
 
 // Start download for a specific update
 function startDownload(updateId) {
+    // Update button to loading state
+    updateDownloadButtonState(updateId, 'loading');
     showLoadingOverlay('Starting download...');
     
     fetch(`/admin/app/systemupdate/${updateId}/download/`, {
@@ -53,11 +55,13 @@ function startDownload(updateId) {
             startProgressTracking(updateId);
         } else {
             showNotification('Error starting download: ' + data.message, 'error');
+            updateDownloadButtonState(updateId, 'error');
         }
     })
     .catch(error => {
         hideLoadingOverlay();
         showNotification('Network error while starting download', 'error');
+        updateDownloadButtonState(updateId, 'error');
         console.error('Error:', error);
     });
 }
@@ -87,6 +91,7 @@ function installUpdate(updateId) {
     }
     
     showLoadingOverlay('Installing update... Please do not close this page.');
+    showTerminal(updateId);
     
     fetch(`/admin/app/systemupdate/${updateId}/install/`, {
         method: 'POST',
@@ -102,11 +107,13 @@ function installUpdate(updateId) {
             startInstallTracking(updateId);
         } else {
             hideLoadingOverlay();
+            hideTerminal();
             showNotification('Error installing update: ' + data.message, 'error');
         }
     })
     .catch(error => {
         hideLoadingOverlay();
+        hideTerminal();
         showNotification('Network error while installing update', 'error');
         console.error('Error:', error);
     });
@@ -144,6 +151,108 @@ function rollbackUpdate(updateId) {
     });
 }
 
+// Remove update
+function removeUpdate(updateId) {
+    if (!confirm('Are you sure you want to remove this update? This will delete all downloaded files and the update record.')) {
+        return;
+    }
+    
+    showLoadingOverlay('Removing update...');
+    
+    fetch(`/admin/app/systemupdate/${updateId}/remove/`, {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': getCookie('csrftoken'),
+            'Content-Type': 'application/json',
+        },
+    })
+    .then(response => response.json())
+    .then(data => {
+        hideLoadingOverlay();
+        if (data.status === 'success') {
+            showNotification('Update removed successfully', 'success');
+            setTimeout(() => location.reload(), 1000);
+        } else {
+            showNotification('Error removing update: ' + data.message, 'error');
+        }
+    })
+    .catch(error => {
+        hideLoadingOverlay();
+        showNotification('Network error while removing update', 'error');
+        console.error('Error:', error);
+    });
+}
+
+// Repair update
+function repairUpdate(updateId) {
+    if (!confirm('Are you sure you want to repair this update? This will re-run post-installation tasks.')) {
+        return;
+    }
+    
+    showLoadingOverlay('Repairing update...');
+    showTerminal(updateId);
+    
+    fetch(`/admin/app/systemupdate/${updateId}/repair/`, {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': getCookie('csrftoken'),
+            'Content-Type': 'application/json',
+        },
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.status === 'success') {
+            showNotification('Update repair started', 'success');
+            startInstallTracking(updateId);
+        } else {
+            hideLoadingOverlay();
+            hideTerminal();
+            showNotification('Error starting repair: ' + data.message, 'error');
+        }
+    })
+    .catch(error => {
+        hideLoadingOverlay();
+        hideTerminal();
+        showNotification('Network error while starting repair', 'error');
+        console.error('Error:', error);
+    });
+}
+
+// Retry update
+function retryUpdate(updateId) {
+    if (!confirm('Are you sure you want to retry this update installation?')) {
+        return;
+    }
+    
+    showLoadingOverlay('Retrying update installation...');
+    showTerminal(updateId);
+    
+    fetch(`/admin/app/systemupdate/${updateId}/retry/`, {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': getCookie('csrftoken'),
+            'Content-Type': 'application/json',
+        },
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.status === 'success') {
+            showNotification('Update retry started', 'success');
+            startInstallTracking(updateId);
+        } else {
+            hideLoadingOverlay();
+            hideTerminal();
+            showNotification('Error starting retry: ' + data.message, 'error');
+        }
+    })
+    .catch(error => {
+        hideLoadingOverlay();
+        hideTerminal();
+        showNotification('Network error while starting retry', 'error');
+        console.error('Error:', error);
+    });
+}
+
 // Progress tracking for downloads
 function startProgressTracking(updateId) {
     updateProgressInterval = setInterval(() => {
@@ -152,8 +261,13 @@ function startProgressTracking(updateId) {
         .then(data => {
             updateProgressDisplay(updateId, data.progress, data.status);
             
-            if (data.status === 'completed' || data.status === 'failed') {
+            if (data.status === 'ready') {
                 stopProgressTracking();
+                updateDownloadButtonState(updateId, 'ready');
+                showNotification('Download completed! Ready to install.', 'success');
+            } else if (data.status === 'failed') {
+                stopProgressTracking();
+                updateDownloadButtonState(updateId, 'failed');
                 setTimeout(() => location.reload(), 1000);
             }
         })
@@ -167,25 +281,48 @@ function startProgressTracking(updateId) {
 function startInstallTracking(updateId) {
     updateProgressInterval = setInterval(() => {
         fetch(`/admin/app/systemupdate/${updateId}/install-progress/`)
-        .then(response => response.json())
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+            return response.json();
+        })
         .then(data => {
+            if (data.status === 'error') {
+                console.error('Server error in install progress:', data.message);
+                stopProgressTracking();
+                hideLoadingOverlay();
+                hideTerminal();
+                showNotification('Installation tracking error: ' + data.message, 'error');
+                return;
+            }
+            
             updateProgressDisplay(updateId, data.progress, data.status);
             
             if (data.status === 'completed') {
                 stopProgressTracking();
                 hideLoadingOverlay();
+                hideTerminal();
                 showNotification('Update installed successfully! Reloading...', 'success');
                 setTimeout(() => location.reload(), 2000);
             } else if (data.status === 'failed') {
                 stopProgressTracking();
                 hideLoadingOverlay();
-                showNotification('Update installation failed: ' + data.error, 'error');
+                hideTerminal();
+                showNotification('Update installation failed: ' + (data.error || 'Unknown error'), 'error');
                 setTimeout(() => location.reload(), 1000);
             }
         })
         .catch(error => {
             console.error('Install tracking error:', error);
+            stopProgressTracking();
+            hideLoadingOverlay();
+            hideTerminal();
+            showNotification('Connection error during installation tracking', 'error');
         });
+        
+        // Also fetch installation logs
+        fetchInstallationLogs(updateId);
     }, 3000); // Check every 3 seconds for installations
 }
 
@@ -275,6 +412,88 @@ function getCookie(name) {
         }
     }
     return cookieValue;
+}
+
+// Terminal functions
+function showTerminal(updateId) {
+    const terminal = document.createElement('div');
+    terminal.id = 'installation-terminal';
+    terminal.innerHTML = `
+        <div class="terminal-header">
+            <h4><i class="fas fa-terminal"></i> Installation Console</h4>
+            <button type="button" class="btn-close" onclick="hideTerminal()"></button>
+        </div>
+        <div class="terminal-body">
+            <div id="terminal-content">Starting installation...</div>
+        </div>
+    `;
+    document.body.appendChild(terminal);
+}
+
+function hideTerminal() {
+    const terminal = document.getElementById('installation-terminal');
+    if (terminal) {
+        terminal.remove();
+    }
+}
+
+function fetchInstallationLogs(updateId) {
+    fetch(`/admin/app/systemupdate/${updateId}/installation-logs/`)
+    .then(response => {
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        return response.json();
+    })
+    .then(data => {
+        if (data.status === 'success') {
+            updateTerminalContent(data.logs);
+        } else {
+            console.error('Error in installation logs response:', data.message);
+        }
+    })
+    .catch(error => {
+        console.error('Error fetching installation logs:', error);
+        // Don't show error notification for logs as it's not critical
+    });
+}
+
+function updateTerminalContent(logs) {
+    const terminalContent = document.getElementById('terminal-content');
+    if (terminalContent && logs) {
+        terminalContent.innerHTML = logs.replace(/\n/g, '<br>');
+        terminalContent.scrollTop = terminalContent.scrollHeight;
+    }
+}
+
+// Button state management
+function updateDownloadButtonState(updateId, state) {
+    const row = document.querySelector(`tr[data-update-id="${updateId}"]`);
+    if (!row) return;
+    
+    const actionCell = row.querySelector('.action-buttons');
+    if (!actionCell) return;
+    
+    let buttonHtml = '';
+    
+    switch (state) {
+        case 'loading':
+            buttonHtml = '<button class="btn btn-sm btn-secondary" disabled><i class="fas fa-spinner fa-spin"></i> Downloading...</button>';
+            break;
+        case 'ready':
+            buttonHtml = `<a class="btn btn-sm btn-success" href="#" onclick="installUpdate(${updateId}); return false;">Install</a>`;
+            break;
+        case 'failed':
+            buttonHtml = `<a class="btn btn-sm btn-primary" href="#" onclick="startDownload(${updateId}); return false;">Retry Download</a>`;
+            break;
+        case 'error':
+            buttonHtml = `<a class="btn btn-sm btn-primary" href="#" onclick="startDownload(${updateId}); return false;">Download</a>`;
+            break;
+    }
+    
+    if (buttonHtml) {
+        actionCell.innerHTML = buttonHtml;
+    }
 }
 
 // Initialize when DOM is loaded
