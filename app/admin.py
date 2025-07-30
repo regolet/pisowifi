@@ -3363,6 +3363,9 @@ class VLANSettingsAdmin(Singleton):
         from django.contrib import messages
         messages.add_message(request, messages.INFO, 'VLAN Settings updated successfully. Click "Apply Mode" to activate changes.')
         super().save_model(request, obj, form, change)
+    
+    class Media:
+        js = ('admin/js/vlan_settings.js',)
 
 
 # Replace the default admin site
