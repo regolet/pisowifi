@@ -23,7 +23,12 @@ class NetworkConfigurationService:
     def apply_network_mode(self, vlan_settings):
         """Apply network configuration based on VLAN settings"""
         try:
+            # Pre-flight checks for VLAN compatibility
             if vlan_settings.network_mode == 'vlan':
+                success, message = self._check_vlan_prerequisites()
+                if not success:
+                    return False, f"VLAN prerequisites not met: {message}"
+                
                 return self._configure_vlan_mode(vlan_settings)
             else:
                 return self._configure_usb_to_lan_mode(vlan_settings)
@@ -280,3 +285,85 @@ wpa=0
                 return False, "VLAN ID must be between 1 and 4094"
         except ValueError:
             return False, "VLAN ID must be a number"
+    
+    def _check_vlan_prerequisites(self):
+        """Check if system has VLAN support prerequisites"""
+        try:
+            # Check if VLAN package is installed
+            result = subprocess.run(['dpkg', '-l', 'vlan'], 
+                                  capture_output=True, text=True, check=False)
+            if result.returncode != 0:
+                # Try to install VLAN package
+                logger.info("Installing VLAN package...")
+                install_result = subprocess.run(['sudo', 'apt-get', 'update'], check=False)
+                install_result = subprocess.run(['sudo', 'apt-get', 'install', '-y', 'vlan'], 
+                                             capture_output=True, text=True, check=False)
+                if install_result.returncode != 0:
+                    return False, "Failed to install VLAN package. Please install manually: sudo apt-get install vlan"
+            
+            # Check if 8021q module is available
+            modprobe_result = subprocess.run(['sudo', 'modprobe', '8021q'], 
+                                           capture_output=True, text=True, check=False)
+            if modprobe_result.returncode != 0:
+                return False, "VLAN kernel module (8021q) not available on this system"
+            
+            # Ensure 8021q module loads on boot
+            modules_file = '/etc/modules'
+            try:
+                with open(modules_file, 'r') as f:
+                    content = f.read()
+                if '8021q' not in content:
+                    with open('/tmp/modules_new', 'w') as f:
+                        f.write(content + '\n8021q\n')
+                    subprocess.run(['sudo', 'mv', '/tmp/modules_new', modules_file], check=True)
+                    subprocess.run(['sudo', 'chmod', '644', modules_file], check=True)
+            except Exception as e:
+                logger.warning(f"Could not update /etc/modules: {e}")
+            
+            return True, "VLAN prerequisites satisfied"
+            
+        except Exception as e:
+            logger.error(f"Error checking VLAN prerequisites: {e}")
+            return False, f"Error checking VLAN support: {str(e)}"
+    
+    def detect_network_interfaces(self):
+        """Detect available network interfaces"""
+        try:
+            # Get all network interfaces
+            result = subprocess.run(['ip', 'link', 'show'], 
+                                  capture_output=True, text=True, check=True)
+            
+            ethernet_interfaces = []
+            wifi_interfaces = []
+            
+            for line in result.stdout.split('\n'):
+                if 'state UP' in line or 'state DOWN' in line:
+                    # Extract interface name
+                    parts = line.split(':')
+                    if len(parts) >= 2:
+                        interface = parts[1].strip()
+                        
+                        # Skip loopback and virtual interfaces
+                        if interface in ['lo'] or interface.startswith('veth'):
+                            continue
+                            
+                        # Classify interface type
+                        if interface.startswith(('eth', 'en')):
+                            ethernet_interfaces.append(interface)
+                        elif interface.startswith(('wlan', 'wl')):
+                            wifi_interfaces.append(interface)
+            
+            return {
+                'ethernet': ethernet_interfaces,
+                'wifi': wifi_interfaces,
+                'detected': True
+            }
+            
+        except Exception as e:
+            logger.error(f"Error detecting network interfaces: {e}")
+            return {
+                'ethernet': ['eth0'],  # Fallback defaults
+                'wifi': ['wlan0'],
+                'detected': False,
+                'error': str(e)
+            }
