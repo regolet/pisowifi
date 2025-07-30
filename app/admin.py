@@ -2815,7 +2815,7 @@ class SystemUpdateAdmin(admin.ModelAdmin):
 class UpdateSettingsAdmin(Singleton):
     fieldsets = (
         ('Repository Settings', {
-            'fields': ('GitHub_Repository', 'Update_Channel', 'Current_Version')
+            'fields': ('GitHub_Repository', 'Update_Channel', 'current_version_display')
         }),
         ('Auto Update Configuration', {
             'fields': ('Check_Interval_Hours', 'Auto_Download', 'Auto_Install', 'Last_Check')
@@ -2825,10 +2825,74 @@ class UpdateSettingsAdmin(Singleton):
         })
     )
     
-    readonly_fields = ('Last_Check', 'Current_Version')
+    readonly_fields = ('Last_Check', 'current_version_display')
+    
+    def current_version_display(self, obj):
+        from django.utils.html import format_html
+        return format_html(
+            '<div style="display: flex; align-items: center; gap: 10px;">'
+            '<span style="font-weight: bold; color: #28a745;">{}</span>'
+            '<a href="#" onclick="refreshVersion(); return false;" '
+            'style="background-color: #17a2b8; color: white; padding: 4px 8px; text-decoration: none; border-radius: 3px; font-size: 11px;">'
+            '<i class="fas fa-sync" style="margin-right: 3px;"></i>Refresh</a>'
+            '</div>'
+            '<script>'
+            'function refreshVersion() {{'
+            '    if (confirm("Refresh current version from git tags?")) {{'
+            '        fetch("/admin/app/updatesettings/refresh-version/", {{'
+            '            method: "POST",'
+            '            headers: {{'
+            '                "X-CSRFToken": document.querySelector("[name=csrfmiddlewaretoken]").value,'
+            '                "Content-Type": "application/json"'
+            '            }}'
+            '        }})'
+            '.then(response => response.json())'
+            '.then(data => {{'
+            '            if (data.status === "success") {{'
+            '                alert("Version updated to: " + data.version);'
+            '                location.reload();'
+            '            }} else {{'
+            '                alert("Error: " + data.message);'
+            '            }}'
+            '        }})'
+            '.catch(error => alert("Network error: " + error));'
+            '    }}'
+            '}}'
+            '</script>',
+            obj.Current_Version
+        )
+    current_version_display.short_description = 'Current Version'
     
     def changelist_view(self, request, extra_context=None):
         return HttpResponseRedirect(reverse('admin:app_updatesettings_change', args=[1]))
+    
+    def get_urls(self):
+        from django.urls import path
+        urls = super().get_urls()
+        custom_urls = [
+            path('refresh-version/', self.admin_site.admin_view(self.refresh_version_view), name='app_updatesettings_refresh_version'),
+        ]
+        return custom_urls + urls
+    
+    def refresh_version_view(self, request):
+        from django.http import JsonResponse
+        if request.method == 'POST':
+            try:
+                settings = models.UpdateSettings.load()
+                new_version = models.UpdateSettings.get_system_version()
+                settings.Current_Version = new_version
+                settings.save()
+                return JsonResponse({
+                    'status': 'success',
+                    'version': new_version,
+                    'message': f'Version updated to {new_version}'
+                })
+            except Exception as e:
+                return JsonResponse({
+                    'status': 'error',
+                    'message': str(e)
+                })
+        return JsonResponse({'status': 'error', 'message': 'Invalid request method'})
 
 
 # Replace the default admin site

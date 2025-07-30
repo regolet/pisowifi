@@ -1139,7 +1139,7 @@ class UpdateSettings(models.Model):
     Max_Backup_Count = models.IntegerField(default=3, verbose_name='Maximum Backup Count')
     
     Last_Check = models.DateTimeField(null=True, blank=True, verbose_name='Last Check')
-    Current_Version = models.CharField(max_length=20, default='1.0.0', verbose_name='Current Version')
+    Current_Version = models.CharField(max_length=20, default='2.0.1', verbose_name='Current Version')
     Update_Channel = models.CharField(max_length=20, default='stable', choices=[
         ('stable', 'Stable'),
         ('beta', 'Beta'),
@@ -1160,4 +1160,52 @@ class UpdateSettings(models.Model):
     @classmethod
     def load(cls):
         obj, created = cls.objects.get_or_create(pk=1)
+        if created or obj.Current_Version == '1.0.0':
+            # Auto-detect version from git on first load or if still default
+            obj.Current_Version = cls.get_system_version()
+            obj.save()
         return obj
+    
+    @staticmethod
+    def get_system_version():
+        """Get current system version from git tags"""
+        import subprocess
+        import os
+        try:
+            # Get the latest git tag
+            result = subprocess.run(
+                ['git', 'describe', '--tags', '--abbrev=0'],
+                capture_output=True,
+                text=True,
+                cwd=os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            )
+            if result.returncode == 0:
+                version = result.stdout.strip()
+                # Remove 'v' prefix if present
+                if version.startswith('v'):
+                    version = version[1:]
+                return version
+        except Exception:
+            pass
+        
+        # Fallback: try to get from git describe
+        try:
+            result = subprocess.run(
+                ['git', 'describe', '--tags', '--always'],
+                capture_output=True,
+                text=True,
+                cwd=os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            )
+            if result.returncode == 0:
+                version = result.stdout.strip()
+                # Remove 'v' prefix and commit info if present
+                if version.startswith('v'):
+                    version = version[1:]
+                if '-' in version:
+                    version = version.split('-')[0]
+                return version
+        except Exception:
+            pass
+        
+        # Final fallback
+        return '2.0.1'
