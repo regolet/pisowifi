@@ -12,25 +12,25 @@
 
 {% block object-tools-items %}
     {{ block.super }}
-    <li>
+    <li style="list-style: none;">
         <a href="#" class="btn btn-success" id="create-full-backup-btn" onclick="createBackup('full'); return false;" 
            style="background-color: #007bff; border-color: #007bff; color: white; padding: 8px 16px; border-radius: 4px; text-decoration: none; margin-left: 5px;">
             <i class="fas fa-database" style="margin-right: 5px;"></i>Full Backup
         </a>
     </li>
-    <li>
+    <li style="list-style: none;">
         <a href="#" class="btn btn-success" id="create-clients-backup-btn" onclick="createBackup('clients'); return false;" 
            style="background-color: #28a745; border-color: #28a745; color: white; padding: 8px 16px; border-radius: 4px; text-decoration: none; margin-left: 5px;">
             <i class="fas fa-users" style="margin-right: 5px;"></i>Clients Backup
         </a>
     </li>
-    <li>
+    <li style="list-style: none;">
         <a href="#" class="btn btn-success" id="create-settings-backup-btn" onclick="createBackup('settings'); return false;" 
            style="background-color: #ffc107; border-color: #ffc107; color: black; padding: 8px 16px; border-radius: 4px; text-decoration: none; margin-left: 5px;">
             <i class="fas fa-cog" style="margin-right: 5px;"></i>Settings Backup
         </a>
     </li>
-    <li>
+    <li style="list-style: none;">
         <a href="#" class="btn btn-success" id="create-custom-backup-btn" onclick="showCustomBackupDialog(); return false;" 
            style="background-color: #17a2b8; border-color: #17a2b8; color: white; padding: 8px 16px; border-radius: 4px; text-decoration: none; margin-left: 5px;">
             <i class="fas fa-plus" style="margin-right: 5px;"></i>Custom Backup
