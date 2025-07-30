@@ -28,6 +28,10 @@ class SettingsForm(forms.ModelForm):
 		(attrs={'class':'vTextField'}))
 	Disable_Pause_Time= forms.CharField(widget= forms.TextInput
 		(attrs={'class':'vTextField'}))
+	Default_Block_Duration= forms.CharField(widget= forms.TextInput
+		(attrs={'class':'vTextField'}))
+	Enable_Permanent_Block= forms.BooleanField(required=False, widget=forms.CheckboxInput
+		(attrs={'class':'vCheckboxLabel'}))
 
 	class Meta:
 		model = models.Settings

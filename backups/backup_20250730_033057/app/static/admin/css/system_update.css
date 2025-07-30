@@ -1,0 +1,324 @@
+/* System Update Admin Styles */
+
+/* Loading Overlay */
+#update-loading-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.7);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 10000;
+}
+
+.loading-content {
+    background: white;
+    padding: 30px;
+    border-radius: 10px;
+    text-align: center;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+}
+
+.loading-content p {
+    margin: 0;
+    color: #333;
+    font-size: 16px;
+}
+
+/* Progress Bars */
+.progress {
+    background-color: #e9ecef;
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.progress-bar {
+    transition: width 0.3s ease;
+    font-size: 12px;
+    font-weight: 600;
+    text-align: center;
+    line-height: 20px;
+}
+
+/* Action Buttons */
+.action-buttons .btn {
+    margin-right: 5px;
+    margin-bottom: 2px;
+    font-size: 11px;
+    padding: 3px 8px;
+    border-radius: 3px;
+}
+
+.action-buttons .btn-primary {
+    background-color: #007bff;
+    border-color: #007bff;
+}
+
+.action-buttons .btn-success {
+    background-color: #28a745;
+    border-color: #28a745;
+}
+
+.action-buttons .btn-warning {
+    background-color: #ffc107;
+    border-color: #ffc107;
+    color: #212529;
+}
+
+.action-buttons .btn-danger {
+    background-color: #dc3545;
+    border-color: #dc3545;
+}
+
+/* Status Indicators */
+.status-indicator {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+.status-checking {
+    background-color: #6c757d;
+    color: white;
+}
+
+.status-available {
+    background-color: #17a2b8;
+    color: white;
+}
+
+.status-downloading {
+    background-color: #ffc107;
+    color: #212529;
+}
+
+.status-ready {
+    background-color: #28a745;
+    color: white;
+}
+
+.status-installing {
+    background-color: #fd7e14;
+    color: white;
+}
+
+.status-completed {
+    background-color: #28a745;
+    color: white;
+}
+
+.status-failed {
+    background-color: #dc3545;
+    color: white;
+}
+
+.status-rollback {
+    background-color: #6f42c1;
+    color: white;
+}
+
+/* Update Information Cards */
+.update-info-card {
+    background: #f8f9fa;
+    border: 1px solid #dee2e6;
+    border-radius: 6px;
+    padding: 15px;
+    margin-bottom: 10px;
+}
+
+.update-version {
+    font-size: 18px;
+    font-weight: 600;
+    color: #495057;
+    margin-bottom: 5px;
+}
+
+.update-title {
+    font-size: 14px;
+    color: #6c757d;
+    margin-bottom: 10px;
+}
+
+.update-description {
+    font-size: 13px;
+    color: #495057;
+    line-height: 1.4;
+}
+
+/* Check Updates Button */
+.check-updates-btn {
+    background: linear-gradient(45deg, #007bff, #0056b3);
+    border: none;
+    color: white;
+    padding: 8px 16px;
+    border-radius: 4px;
+    font-size: 13px;
+    margin-left: 10px;
+    transition: all 0.3s ease;
+}
+
+.check-updates-btn:hover {
+    background: linear-gradient(45deg, #0056b3, #003d82);
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(0, 123, 255, 0.3);
+}
+
+.check-updates-btn i {
+    margin-right: 5px;
+}
+
+/* Update Statistics */
+.update-stats {
+    display: flex;
+    gap: 20px;
+    margin-bottom: 20px;
+    padding: 15px;
+    background: #f8f9fa;
+    border-radius: 6px;
+}
+
+.stat-item {
+    text-align: center;
+    flex: 1;
+}
+
+.stat-number {
+    font-size: 24px;
+    font-weight: 600;
+    color: #007bff;
+    display: block;
+}
+
+.stat-label {
+    font-size: 12px;
+    color: #6c757d;
+    text-transform: uppercase;
+    margin-top: 2px;
+}
+
+/* Download Progress Detail */
+.download-detail {
+    font-size: 11px;
+    color: #6c757d;
+    margin-top: 2px;
+}
+
+/* Error Messages */
+.error-message {
+    background-color: #f8d7da;
+    color: #721c24;
+    padding: 8px 12px;
+    border-radius: 4px;
+    font-size: 12px;
+    margin-top: 5px;
+}
+
+/* Success Messages */
+.success-message {
+    background-color: #d4edda;
+    color: #155724;
+    padding: 8px 12px;
+    border-radius: 4px;
+    font-size: 12px;
+    margin-top: 5px;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .action-buttons .btn {
+        font-size: 10px;
+        padding: 2px 6px;
+        margin-right: 2px;
+    }
+    
+    .progress {
+        width: 100px;
+        height: 16px;
+    }
+    
+    .progress-bar {
+        font-size: 10px;
+        line-height: 16px;
+    }
+    
+    .update-stats {
+        flex-direction: column;
+        gap: 10px;
+    }
+    
+    .check-updates-btn {
+        font-size: 11px;
+        padding: 6px 12px;
+    }
+}
+
+/* Animation for progress bars */
+@keyframes progress-animation {
+    0% {
+        background-position: 0 0;
+    }
+    100% {
+        background-position: 30px 0;
+    }
+}
+
+.progress-bar.animated {
+    background-image: linear-gradient(
+        45deg,
+        rgba(255, 255, 255, 0.15) 25%,
+        transparent 25%,
+        transparent 50%,
+        rgba(255, 255, 255, 0.15) 50%,
+        rgba(255, 255, 255, 0.15) 75%,
+        transparent 75%,
+        transparent
+    );
+    background-size: 30px 30px;
+    animation: progress-animation 2s linear infinite;
+}
+
+/* Tooltip styles for buttons */
+.btn[title] {
+    position: relative;
+}
+
+.btn[title]:hover::after {
+    content: attr(title);
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #333;
+    color: white;
+    padding: 4px 8px;
+    border-radius: 3px;
+    font-size: 11px;
+    white-space: nowrap;
+    z-index: 1000;
+}
+
+/* Update changelog styling */
+.changelog {
+    max-height: 200px;
+    overflow-y: auto;
+    background: #f8f9fa;
+    padding: 10px;
+    border-radius: 4px;
+    font-size: 12px;
+    line-height: 1.4;
+}
+
+.changelog ul {
+    margin: 0;
+    padding-left: 20px;
+}
+
+.changelog li {
+    margin-bottom: 3px;
+}

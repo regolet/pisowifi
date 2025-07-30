@@ -1,0 +1,32 @@
+{% extends "admin/change_list.html" %}
+{% load static %}
+
+{% block extrahead %}
+    {{ block.super }}
+{% endblock %}
+
+{% block object-tools-items %}
+    {{ block.super }}
+    <li>
+        <a href="#" class="btn btn-success" id="check-updates-btn" onclick="checkForUpdates(); return false;" style="background-color: #28a745; border-color: #28a745; color: white; padding: 8px 16px; border-radius: 4px; text-decoration: none; margin-left: 5px;">
+            <i class="fas fa-sync" style="margin-right: 5px;"></i>Check for Updates
+        </a>
+    </li>
+{% endblock %}
+
+{% block content %}
+    {{ block.super }}
+    
+    <div class="update-instructions" style="background: #e7f3ff; border: 1px solid #b8daff; border-radius: 5px; padding: 15px; margin-top: 20px;">
+        <h5 style="color: #004085; margin: 0 0 10px 0;"><i class="fas fa-info-circle" style="margin-right: 5px;"></i>How to Use System Updates:</h5>
+        <ol style="margin: 0; padding-left: 20px;">
+            <li><strong>Check for Updates:</strong> Click the "Check for Updates" button above to scan GitHub for new releases</li>
+            <li><strong>Download:</strong> Click "Download" on any available update to start downloading</li>
+            <li><strong>Install:</strong> Once downloaded, click "Install" to safely update your system</li>
+            <li><strong>Rollback:</strong> If needed, use "Rollback" to return to the previous version</li>
+        </ol>
+        <p style="margin: 10px 0 0 0; font-size: 13px; color: #495057;">
+            <strong>Note:</strong> All updates create automatic backups before installation. Your system will remain safe during the update process.
+        </p>
+    </div>
+{% endblock %}

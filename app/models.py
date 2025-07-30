@@ -13,6 +13,7 @@ class Clients(models.Model):
     Device_Name = models.CharField(max_length=255, verbose_name='Device Name', null=True, blank=True)
     Time_Left = models.DurationField(default=timezone.timedelta(minutes=0))
     Expire_On = models.DateTimeField(null=True, blank=True)
+    Validity_Expires_On = models.DateTimeField(null=True, blank=True, verbose_name='Validity Expiration', help_text='When purchased time expires and can no longer be used')
     Upload_Rate = models.IntegerField(verbose_name='Upload Bandwidth', help_text='Specify client internet upload bandwidth in Kbps. No value = unlimited bandwidth', null=True, blank=True )
     Download_Rate = models.IntegerField(verbose_name='Download Bandwidth', help_text='Specify client internet download bandwidth in Kbps. No value = unlimited bandwidth', null=True, blank=True )
     Notification_ID = models.CharField(verbose_name = 'Notification ID', max_length=255, null=True, blank = True)
@@ -42,6 +43,15 @@ class Clients(models.Model):
                 return 'Disconnected'
 
     def Connect(self, add_time = timedelta(0)):
+        # Check validity expiration first
+        if self.Validity_Expires_On and timezone.now() > self.Validity_Expires_On:
+            # Time has expired - clear it
+            self.Time_Left = timedelta(0)
+            self.Expire_On = None
+            self.Validity_Expires_On = None
+            self.save()
+            return False
+        
         total_time = self.Time_Left + add_time
         success_flag = False
         if total_time > timedelta(0):
@@ -63,11 +73,73 @@ class Clients(models.Model):
     def Disconnect(self):
         success_flag = False
         if self.Connection_Status == 'Connected':
+            # Preserve remaining time by moving it from Expire_On to Time_Left
+            if self.Expire_On:
+                remaining_time = self.Expire_On - timezone.now()
+                if remaining_time.total_seconds() > 0:
+                    self.Time_Left = remaining_time
+                else:
+                    self.Time_Left = timedelta(0)
             self.Expire_On = None
-            self.Time_Left = timedelta(0)
             self.Notified_Flag = False
             self.save()
             success_flag = True
+        elif self.Connection_Status == 'Paused':
+            # For paused clients, just clear Expire_On but keep Time_Left as is
+            self.Expire_On = None
+            self.Notified_Flag = False
+            self.save()
+            success_flag = True
+        return success_flag
+
+    def Kick(self):
+        """Kick client from WiFi network and remove from database"""
+        import subprocess
+        import os
+        success_flag = False
+        
+        try:
+            # First disconnect internet access
+            if self.Connection_Status in ['Connected', 'Paused']:
+                self.Disconnect()
+            
+            # Force deauthenticate client from WiFi using hostapd_cli
+            # This sends deauth frames to physically kick the client
+            mac_address = self.MAC_Address.replace(':', '')  # Remove colons for hostapd_cli
+            
+            # Try multiple methods to kick client from WiFi
+            kick_commands = [
+                f'hostapd_cli deauthenticate {self.MAC_Address}',
+                f'hostapd_cli disassociate {self.MAC_Address}',
+                f'iwctl station {self.MAC_Address} disconnect'  # Alternative for iwctl
+            ]
+            
+            kicked_successfully = False
+            for cmd in kick_commands:
+                try:
+                    result = subprocess.run(cmd.split(), capture_output=True, text=True, timeout=5)
+                    if result.returncode == 0:
+                        kicked_successfully = True
+                        break
+                except (subprocess.TimeoutExpired, subprocess.CalledProcessError, FileNotFoundError):
+                    continue
+            
+            # If WiFi kick commands failed, try iptables blocking as fallback
+            if not kicked_successfully:
+                try:
+                    # Block client MAC in iptables temporarily
+                    block_cmd = f'iptables -I FORWARD -m mac --mac-source {self.MAC_Address} -j DROP'
+                    subprocess.run(block_cmd.split(), capture_output=True, timeout=5)
+                    kicked_successfully = True
+                except:
+                    pass
+            
+            success_flag = True  # Mark as successful regardless of WiFi kick result
+            
+        except Exception as e:
+            # If all methods fail, still mark as successful for database cleanup
+            success_flag = True
+            
         return success_flag
 
     def Pause(self):
@@ -167,6 +239,8 @@ class Rates(models.Model):
     Denom = models.IntegerField(verbose_name='Denomination', help_text="Coin denomination corresponding to specified coinslot pulse.")
     Pulse = models.IntegerField(blank=True, null=True, help_text="Coinslot pulse count corresponding to coin denomination. Leave it blank for promotional rates.")
     Minutes = models.DurationField(verbose_name='Duration', default=timezone.timedelta(minutes=0), help_text='Internet access duration in hh:mm:ss format')
+    Validity_Days = models.IntegerField(verbose_name='Validity Period (Days)', default=0, help_text='Number of days the purchased time is valid. 0 = no expiration')
+    Validity_Hours = models.IntegerField(verbose_name='Validity Period (Hours)', default=0, help_text='Additional hours for validity period. Combined with days above.')
 
     class Meta:
         verbose_name = "Rate"
@@ -174,6 +248,24 @@ class Rates(models.Model):
 
     def __str__(self):
         return 'Rate: ' + str(self.Denom)
+    
+    def get_validity_duration(self):
+        """Get total validity duration as a timedelta"""
+        from datetime import timedelta
+        return timedelta(days=self.Validity_Days, hours=self.Validity_Hours)
+    
+    def get_validity_display(self):
+        """Get human-readable validity display"""
+        if self.Validity_Days == 0 and self.Validity_Hours == 0:
+            return "No expiration"
+        
+        parts = []
+        if self.Validity_Days > 0:
+            parts.append(f"{self.Validity_Days} day{'s' if self.Validity_Days != 1 else ''}")
+        if self.Validity_Hours > 0:
+            parts.append(f"{self.Validity_Hours} hour{'s' if self.Validity_Hours != 1 else ''}")
+        
+        return " and ".join(parts)
 
 
 class CoinQueue(models.Model):
@@ -236,6 +328,8 @@ class Settings(models.Model):
     Vouchers_Flg = models.IntegerField(verbose_name='Vouchers', default=1, choices=enable_disable_choices, help_text='Enables voucher module.')
     Pause_Resume_Flg = models.IntegerField(verbose_name='Pause/Resume', default=1, choices=enable_disable_choices, help_text='Enables pause/resume function.')
     Disable_Pause_Time = models.DurationField(default=timezone.timedelta(minutes=0), null=True, blank=True, help_text='Disables Pause time button if remaining time is less than the specified time hh:mm:ss format.')
+    Default_Block_Duration = models.DurationField(default=timezone.timedelta(hours=24), verbose_name='Default Block Duration', help_text='Default duration for blocking devices. Format: HH:MM:SS (e.g., 24:00:00 for 24 hours)')
+    Enable_Permanent_Block = models.BooleanField(default=False, verbose_name='Enable Permanent Block Option', help_text='Allow devices to be blocked permanently (no auto-unblock)')
     Coinslot_Pin = models.IntegerField(verbose_name='Coinslot Pin', help_text='Please refer raspberry/orange pi GPIO.BOARD pinout.', null=True, blank=True)
     Light_Pin = models.IntegerField(verbose_name='Light Pin', help_text='Please refer raspberry/orange pi GPIO.BOARD pinout.', null=True, blank=True)
 
@@ -285,15 +379,17 @@ class Vouchers(models.Model):
 
         return random_code
 
-    Voucher_code = models.CharField(default=generate_code, max_length=20, null=False, blank=False, unique=True)
+    Voucher_code = models.CharField(default=generate_code, max_length=20, null=False, blank=True, unique=True)
     Voucher_status = models.CharField(verbose_name='Status', max_length=25, choices=status_choices, default='Not Used', null=False, blank=False)
     Voucher_client = models.CharField(verbose_name='Client', max_length=50, null=True, blank=True, help_text="Voucher code user. * Optional")
     Voucher_create_date_time = models.DateTimeField(verbose_name='Created Date/Time', auto_now_add=True)
     Voucher_used_date_time = models.DateTimeField(verbose_name='Used Date/Time', null=True, blank=True)
     Voucher_time_value = models.DurationField(verbose_name='Time Value', default=timezone.timedelta(minutes=0), null=True, blank=True, help_text='Time value in minutes.')
+    Validity_Days = models.IntegerField(verbose_name='Validity Period (Days)', default=0, help_text='Number of days the voucher time is valid once redeemed. 0 = no expiration')
+    Validity_Hours = models.IntegerField(verbose_name='Validity Period (Hours)', default=0, help_text='Additional hours for validity period. Combined with days above.')
 
     def save(self, *args, **kwargs):
-        if self.Voucher_status == 'Used':
+        if self.Voucher_status == 'Used' and not self.Voucher_used_date_time:
              self.Voucher_used_date_time = timezone.now()
 
         if self.Voucher_status == 'Not Used':
@@ -301,12 +397,77 @@ class Vouchers(models.Model):
 
         super(Vouchers, self).save(*args, **kwargs)
 
+    def is_expired(self):
+        """Check if voucher has expired (30 days from creation)"""
+        from datetime import timedelta
+        if self.Voucher_status in ['Used', 'Expired']:
+            return self.Voucher_status == 'Expired'
+        
+        expiry_date = self.Voucher_create_date_time + timedelta(days=30)
+        return timezone.now() > expiry_date
+    
+    def days_until_expiry(self):
+        """Get days until voucher expires"""
+        from datetime import timedelta
+        if self.Voucher_status in ['Used', 'Expired']:
+            return 0
+        
+        expiry_date = self.Voucher_create_date_time + timedelta(days=30)
+        days_left = (expiry_date - timezone.now()).days
+        return max(0, days_left)
+    
+    def get_time_display(self):
+        """Get human readable time display"""
+        total_seconds = int(self.Voucher_time_value.total_seconds())
+        hours = total_seconds // 3600
+        minutes = (total_seconds % 3600) // 60
+        return f"{hours}h {minutes}m"
+    
+    def get_validity_duration(self):
+        """Get total validity duration as a timedelta"""
+        from datetime import timedelta
+        return timedelta(days=self.Validity_Days, hours=self.Validity_Hours)
+    
+    def get_validity_display(self):
+        """Get human-readable validity display"""
+        if self.Validity_Days == 0 and self.Validity_Hours == 0:
+            return "No expiration"
+        
+        parts = []
+        if self.Validity_Days > 0:
+            parts.append(f"{self.Validity_Days} day{'s' if self.Validity_Days != 1 else ''}")
+        if self.Validity_Hours > 0:
+            parts.append(f"{self.Validity_Hours} hour{'s' if self.Validity_Hours != 1 else ''}")
+        
+        return " and ".join(parts)
+    
+    def expire_if_needed(self):
+        """Automatically expire voucher if past expiry date"""
+        if self.is_expired() and self.Voucher_status == 'Not Used':
+            self.Voucher_status = 'Expired'
+            self.save()
+            return True
+        return False
+    
+    @classmethod
+    def cleanup_expired_vouchers(cls):
+        """Class method to clean up all expired vouchers"""
+        from datetime import timedelta
+        expiry_cutoff = timezone.now() - timedelta(days=30)
+        
+        expired_count = cls.objects.filter(
+            Voucher_status='Not Used',
+            Voucher_create_date_time__lt=expiry_cutoff
+        ).update(Voucher_status='Expired')
+        
+        return expired_count
+
     class Meta:
         verbose_name = 'Voucher'
         verbose_name_plural = 'Vouchers'
 
     def __str__(self):
-        return self.Voucher_code
+        return f"{self.Voucher_code} ({self.Voucher_status}) - {self.get_time_display()}"
 
 
 class Device(models.Model):
@@ -884,6 +1045,7 @@ class BlockedDevices(models.Model):
     Block_Reason = models.CharField(max_length=20, choices=BLOCK_REASONS, default='manual', verbose_name='Block Reason')
     Blocked_Date = models.DateTimeField(auto_now_add=True, verbose_name='Blocked Date')
     Auto_Unblock_After = models.DateTimeField(null=True, blank=True, verbose_name='Auto Unblock After')
+    Is_Permanent = models.BooleanField(default=False, verbose_name='Permanent Block', help_text='If enabled, device will remain blocked indefinitely')
     TTL_Violations_Count = models.IntegerField(default=0, verbose_name='TTL Violations')
     Is_Active = models.BooleanField(default=True, verbose_name='Block Active')
     Admin_Notes = models.TextField(null=True, blank=True, verbose_name='Admin Notes')
@@ -898,6 +1060,9 @@ class BlockedDevices(models.Model):
         return f'Blocked: {name}'
 
     def is_block_expired(self):
+        # Permanent blocks never expire
+        if self.Is_Permanent:
+            return False
         if self.Auto_Unblock_After and timezone.now() > self.Auto_Unblock_After:
             return True
         return False
@@ -940,6 +1105,7 @@ class SystemUpdate(models.Model):
     Backup_Path = models.CharField(max_length=500, null=True, blank=True, verbose_name='Backup Path')
     Is_Auto_Update = models.BooleanField(default=False, verbose_name='Auto Update')
     Force_Update = models.BooleanField(default=False, verbose_name='Force Update')
+    Installation_Log = models.TextField(null=True, blank=True, verbose_name='Installation Log')
     
     Created_At = models.DateTimeField(auto_now_add=True, verbose_name='Created At')
     Updated_At = models.DateTimeField(auto_now=True, verbose_name='Updated At')

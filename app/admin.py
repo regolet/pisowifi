@@ -4,6 +4,7 @@ from django.db.models import Q
 from django.http import HttpResponseRedirect
 from django.urls import path, reverse
 from django.utils import timezone
+from django.utils.html import format_html
 from app import models, forms
 
 def client_check(request):
@@ -37,10 +38,39 @@ class Singleton(admin.ModelAdmin):
 
 
 class ClientsAdmin(admin.ModelAdmin):
-    list_display = ('IP_Address', 'MAC_Address', 'Device_Name', 'auth_status', 'Connection_Status', 'block_status', 'Time_Left', 'running_time', 'action_buttons')
-    readonly_fields = ('IP_Address', 'MAC_Address', 'Expire_On', 'Notification_ID', 'Notified_Flag', 'Date_Created')
+    list_display = ('IP_Address', 'MAC_Address', 'Device_Name', 'auth_status', 'Connection_Status', 'block_status', 'actual_time_left', 'action_buttons')
+    readonly_fields = ('IP_Address', 'MAC_Address', 'Expire_On', 'Validity_Expires_On', 'Date_Created', 'Connection_Status', 'running_time')
+    exclude = ('Notification_ID', 'Notified_Flag')  # Hide notification fields
     actions = None  # Disable bulk actions since we have individual buttons
     list_filter = (('Expire_On', admin.EmptyFieldListFilter),)  # Add filter for authenticated/unauthenticated
+    
+    fieldsets = (
+        ('Client Information', {
+            'fields': ('IP_Address', 'MAC_Address', 'Device_Name')
+        }),
+        ('Connection Status', {
+            'fields': ('Connection_Status', 'running_time', 'Time_Left', 'Expire_On', 'Validity_Expires_On'),
+            'description': 'Time Left is used for paused sessions. Running Time shows current session time remaining. Validity Expiration shows when purchased time expires.'
+        }),
+        ('Bandwidth Settings', {
+            'fields': ('Upload_Rate', 'Download_Rate'),
+            'description': 'Specify bandwidth limits in Kbps. Leave empty for unlimited.'
+        }),
+        ('System Information', {
+            'fields': ('Date_Created',),
+            'classes': ('collapse',)
+        }),
+    )
+    
+    def get_form(self, request, obj=None, **kwargs):
+        form = super().get_form(request, obj, **kwargs)
+        # Add better labels and help text
+        if 'Time_Left' in form.base_fields:
+            form.base_fields['Time_Left'].label = 'Time Left (Paused Sessions)'
+            form.base_fields['Time_Left'].help_text = 'Duration stored when session is paused. For connected clients, see Running Time above.'
+        if 'Device_Name' in form.base_fields:
+            form.base_fields['Device_Name'].help_text = 'Optional device name or description'
+        return form
 
     def changelist_view(self, request, extra_context=None):
         extra_context = extra_context or {}
@@ -102,6 +132,64 @@ class ClientsAdmin(admin.ModelAdmin):
             else:
                 messages.add_message(request, messages.WARNING, 'Device {} was already added on the whitelisted devices'.format(device_name))
 
+    @admin.display(description='Time Remaining')
+    def actual_time_left(self, obj):
+        """Show actual time remaining based on connection status"""
+        from django.utils.html import format_html
+        from datetime import timedelta
+        
+        if obj.Connection_Status == 'Connected':
+            # For connected clients, show running_time
+            time_left = obj.running_time
+        elif obj.Connection_Status == 'Paused':
+            # For paused clients, show Time_Left
+            time_left = obj.Time_Left
+        else:
+            # For disconnected clients, show 0
+            time_left = timedelta(0)
+        
+        # Format the time display
+        if time_left.total_seconds() <= 0:
+            return format_html('<span style="color: gray;">0:00:00</span>')
+        
+        total_seconds = int(time_left.total_seconds())
+        hours = total_seconds // 3600
+        minutes = (total_seconds % 3600) // 60
+        seconds = total_seconds % 60
+        
+        # Color code based on time remaining
+        if total_seconds < 300:  # Less than 5 minutes
+            color = 'red'
+        elif total_seconds < 1800:  # Less than 30 minutes
+            color = 'orange'
+        else:
+            color = 'green'
+        
+        time_str = f"{hours}:{minutes:02d}:{seconds:02d}"
+        return format_html(
+            '<span style="color: {}; font-weight: bold;">{}</span>',
+            color, time_str
+        )
+    
+    @admin.display(description='Running Time')
+    def running_time(self, obj):
+        """Display running time in edit form"""
+        from django.utils.html import format_html
+        from datetime import timedelta
+        
+        time_left = obj.running_time
+        
+        if time_left.total_seconds() <= 0:
+            return format_html('<span style="color: gray;">0:00:00</span>')
+        
+        total_seconds = int(time_left.total_seconds())
+        hours = total_seconds // 3600
+        minutes = (total_seconds % 3600) // 60
+        seconds = total_seconds % 60
+        
+        time_str = f"{hours}:{minutes:02d}:{seconds:02d}"
+        return format_html('<span style="font-weight: bold;">{}</span>', time_str)
+    
     @admin.display(description='Block Status')
     def block_status(self, obj):
         """Show current block status of the device"""
@@ -157,14 +245,34 @@ class ClientsAdmin(admin.ModelAdmin):
                 pause_url
             ))
         elif connection_status == 'Paused':
-            # Connect button (resume)
+            # Connect button (resume if connected to WiFi)
             connect_url = f"/admin/app/clients/{obj.pk}/connect/"
             buttons.append(format_html(
                 '<a class="button" href="{}" onclick="return confirm(\'Resume this device?\');" '
                 'style="background-color: #28a745; color: white; padding: 4px 8px; text-decoration: none; border-radius: 3px; margin: 1px; font-size: 11px; white-space: nowrap;" '
-                'title="Resume Device">'
+                'title="Resume Device (WiFi Required)">'
                 '<i class="fas fa-play" style="margin-right: 3px;"></i>Resume</a>',
                 connect_url
+            ))
+            
+            # Force Resume button (countdown regardless of WiFi)
+            resume_url = f"/admin/app/clients/{obj.pk}/resume/"
+            buttons.append(format_html(
+                '<a class="button" href="{}" onclick="return confirm(\'Force time countdown? Time will run out even if not connected to WiFi.\');" '
+                'style="background-color: #dc3545; color: white; padding: 4px 8px; text-decoration: none; border-radius: 3px; margin: 1px; font-size: 11px; white-space: nowrap;" '
+                'title="Force Time Countdown (No WiFi Required)">'
+                '<i class="fas fa-hourglass-start" style="margin-right: 3px;"></i>Force Resume</a>',
+                resume_url
+            ))
+            
+            # Disconnect button for paused clients too
+            disconnect_url = f"/admin/app/clients/{obj.pk}/disconnect/"
+            buttons.append(format_html(
+                '<a class="button" href="{}" onclick="return confirm(\'Disconnect this device?\');" '
+                'style="background-color: #fd7e14; color: white; padding: 4px 8px; text-decoration: none; border-radius: 3px; margin: 1px; font-size: 11px; white-space: nowrap;" '
+                'title="Disconnect Device">'
+                '<i class="fas fa-unlink" style="margin-right: 3px;"></i>Disconnect</a>',
+                disconnect_url
             ))
         elif connection_status == 'Disconnected':
             # Connect button for disconnected clients
@@ -174,9 +282,19 @@ class ClientsAdmin(admin.ModelAdmin):
                 buttons.append(format_html(
                     '<a class="button" href="{}" onclick="return confirm(\'Connect this device?\');" '
                     'style="background-color: #28a745; color: white; padding: 4px 8px; text-decoration: none; border-radius: 3px; margin: 1px; font-size: 11px; white-space: nowrap;" '
-                    'title="Connect Device">'
+                    'title="Connect Device (WiFi Required)">'
                     '<i class="fas fa-link" style="margin-right: 3px;"></i>Connect</a>',
                     connect_url
+                ))
+                
+                # Force Resume button for disconnected clients with time
+                resume_url = f"/admin/app/clients/{obj.pk}/resume/"
+                buttons.append(format_html(
+                    '<a class="button" href="{}" onclick="return confirm(\'Force time countdown? Time will run out even if not connected to WiFi.\');" '
+                    'style="background-color: #dc3545; color: white; padding: 4px 8px; text-decoration: none; border-radius: 3px; margin: 1px; font-size: 11px; white-space: nowrap;" '
+                    'title="Force Time Countdown (No WiFi Required)">'
+                    '<i class="fas fa-hourglass-start" style="margin-right: 3px;"></i>Force Resume</a>',
+                    resume_url
                 ))
             else:
                 # No time left - disabled style connect button
@@ -199,6 +317,28 @@ class ClientsAdmin(admin.ModelAdmin):
         ))
         
         # Block/Unblock buttons
+        # Kick button - available for all clients
+        kick_url = f"/admin/app/clients/{obj.pk}/kick/"
+        if connection_status in ['Connected', 'Paused']:
+            # Kick active clients (disconnect but preserve time)
+            buttons.append(format_html(
+                '<a class="button" href="{}" onclick="return confirm(\'Kick this device from WiFi? (Time will be preserved)\');" '
+                'style="background-color: #e83e8c; color: white; padding: 4px 8px; text-decoration: none; border-radius: 3px; margin: 1px; font-size: 11px; white-space: nowrap;" '
+                'title="Kick from WiFi (Time Preserved)">'
+                '<i class="fas fa-user-times" style="margin-right: 3px;"></i>Kick</a>',
+                kick_url
+            ))
+        else:
+            # Remove disconnected clients from list
+            remove_url = f"{kick_url}?remove=true"
+            buttons.append(format_html(
+                '<a class="button" href="{}" onclick="return confirm(\'Remove this device from list?\');" '
+                'style="background-color: #6f42c1; color: white; padding: 4px 8px; text-decoration: none; border-radius: 3px; margin: 1px; font-size: 11px; white-space: nowrap;" '
+                'title="Remove from List">'
+                '<i class="fas fa-trash-alt" style="margin-right: 3px;"></i>Remove</a>',
+                remove_url
+            ))
+        
         if is_blocked:
             unblock_url = f"/admin/app/clients/{obj.pk}/unblock/"
             buttons.append(format_html(
@@ -209,14 +349,33 @@ class ClientsAdmin(admin.ModelAdmin):
                 unblock_url
             ))
         else:
+            # Check if permanent block is enabled in settings
+            try:
+                settings = models.Settings.objects.get(pk=1)
+                permanent_enabled = settings.Enable_Permanent_Block
+            except:
+                permanent_enabled = False
+            
+            # Regular block button
             block_url = f"/admin/app/clients/{obj.pk}/block/"
             buttons.append(format_html(
-                '<a class="button" href="{}" onclick="return confirm(\'Block this device?\');" '
+                '<a class="button" href="{}" onclick="return confirm(\'Block this device temporarily?\');" '
                 'style="background-color: #dc3545; color: white; padding: 4px 8px; text-decoration: none; border-radius: 3px; margin: 1px; font-size: 11px; white-space: nowrap;" '
-                'title="Block Device">'
+                'title="Block Device (Temporary)">'
                 '<i class="fas fa-ban" style="margin-right: 3px;"></i>Block</a>',
                 block_url
             ))
+            
+            # Permanent block button (if enabled)
+            if permanent_enabled:
+                permanent_block_url = f"/admin/app/clients/{obj.pk}/block/?permanent=true"
+                buttons.append(format_html(
+                    '<a class="button" href="{}" onclick="return confirm(\'Block this device PERMANENTLY? This cannot be automatically undone.\');" '
+                    'style="background-color: #6f42c1; color: white; padding: 4px 8px; text-decoration: none; border-radius: 3px; margin: 1px; font-size: 11px; white-space: nowrap;" '
+                    'title="Block Device (Permanent)">'
+                    '<i class="fas fa-lock" style="margin-right: 3px;"></i>Permanent</a>',
+                    permanent_block_url
+                ))
         
         # Join all buttons and return as safe HTML
         all_buttons = ''.join(buttons)
@@ -224,6 +383,11 @@ class ClientsAdmin(admin.ModelAdmin):
     
     action_buttons.short_description = 'Actions'
     action_buttons.allow_tags = True
+    
+    @admin.display(description='Actions')
+    def action_buttons_display(self, obj):
+        """Alternative display method for newer Django versions"""
+        return self.action_buttons(obj)
 
     def get_urls(self):
         """Add custom URLs for all client actions"""
@@ -235,6 +399,8 @@ class ClientsAdmin(admin.ModelAdmin):
             path('<int:client_id>/connect/', self.admin_site.admin_view(self.connect_client_view), name='app_clients_connect'),
             path('<int:client_id>/disconnect/', self.admin_site.admin_view(self.disconnect_client_view), name='app_clients_disconnect'),
             path('<int:client_id>/pause/', self.admin_site.admin_view(self.pause_client_view), name='app_clients_pause'),
+            path('<int:client_id>/resume/', self.admin_site.admin_view(self.resume_client_view), name='app_clients_resume'),
+            path('<int:client_id>/kick/', self.admin_site.admin_view(self.kick_client_view), name='app_clients_kick'),
         ]
         return custom_urls + urls
 
@@ -256,9 +422,21 @@ class ClientsAdmin(admin.ModelAdmin):
                 return redirect('admin:app_clients_changelist')
             
             # If it's expired or inactive, reactivate it
+            settings = models.Settings.objects.get(pk=1)
+            
+            # Check if permanent block should be applied (GET parameter or setting)
+            permanent_block = request.GET.get('permanent', 'false').lower() == 'true'
+            
             existing_block.Is_Active = True
             existing_block.Blocked_Date = timezone.now()
-            existing_block.Auto_Unblock_After = timezone.now() + timezone.timedelta(hours=24)
+            existing_block.Is_Permanent = permanent_block
+            
+            if permanent_block:
+                existing_block.Auto_Unblock_After = None  # No auto-unblock for permanent
+            else:
+                block_duration = settings.Default_Block_Duration
+                existing_block.Auto_Unblock_After = timezone.now() + block_duration
+            
             existing_block.Block_Reason = 'manual'
             if existing_block.Admin_Notes:
                 existing_block.Admin_Notes += f' | Reactivated by {request.user.username} on {timezone.now().strftime("%Y-%m-%d %H:%M")}'
@@ -269,12 +447,20 @@ class ClientsAdmin(admin.ModelAdmin):
             messages.success(request, f'Device {device_name} has been blocked successfully.')
             
         except models.BlockedDevices.DoesNotExist:
-            # Create new block record
+            # Create new block record using settings
+            settings = models.Settings.objects.get(pk=1)
+            
+            # Check if permanent block should be applied
+            permanent_block = request.GET.get('permanent', 'false').lower() == 'true'
+            
+            auto_unblock_after = None if permanent_block else timezone.now() + settings.Default_Block_Duration
+            
             models.BlockedDevices.objects.create(
                 MAC_Address=client.MAC_Address,
                 Device_Name=device_name,
                 Block_Reason='manual',
-                Auto_Unblock_After=timezone.now() + timezone.timedelta(hours=24),  # 24 hour default
+                Auto_Unblock_After=auto_unblock_after,
+                Is_Permanent=permanent_block,
                 Admin_Notes=f'Manually blocked from Clients admin by {request.user.username} on {timezone.now().strftime("%Y-%m-%d %H:%M")}'
             )
             messages.success(request, f'Device {device_name} has been blocked successfully.')
@@ -355,6 +541,131 @@ class ClientsAdmin(admin.ModelAdmin):
             messages.warning(request, f'Device {device_name} is not currently connected or already paused.')
         
         return redirect('admin:app_clients_changelist')
+
+    def kick_client_view(self, request, client_id):
+        """Handle individual client kick (disconnect from WiFi + remove from database)"""
+        from django.shortcuts import get_object_or_404, redirect
+        from django.contrib import messages
+        
+        client = get_object_or_404(models.Clients, pk=client_id)
+        device_name = client.Device_Name if client.Device_Name else client.MAC_Address
+        connection_status = client.Connection_Status
+        
+        # Check if we should just remove from database without WiFi kick
+        remove_only = request.GET.get('remove', 'false').lower() == 'true'
+        
+        if remove_only:
+            # Remove client from database only (for already disconnected clients)
+            client.delete()
+            messages.success(request, f'Device {device_name} has been removed from the clients list.')
+        else:
+            # Full kick: disconnect from WiFi but preserve client data and time
+            success = client.Kick()  # This now includes WiFi deauth
+            if success:
+                # Don't delete from database - just ensure they're disconnected
+                # The client record stays so they keep their time when reconnecting
+                if connection_status in ['Connected', 'Paused']:
+                    messages.success(request, f'Device {device_name} has been kicked from WiFi successfully. Time preserved.')
+                else:
+                    messages.success(request, f'Device {device_name} has been disconnected. Time preserved.')
+            else:
+                messages.warning(request, f'Failed to kick device {device_name}.')
+        
+        return redirect('admin:app_clients_changelist')
+
+    def resume_client_view(self, request, client_id):
+        """Handle individual client resume (force time countdown regardless of WiFi connection)"""
+        from django.shortcuts import get_object_or_404, redirect
+        from django.contrib import messages
+        from django.utils import timezone
+        
+        client = get_object_or_404(models.Clients, pk=client_id)
+        device_name = client.Device_Name if client.Device_Name else client.MAC_Address
+        
+        # Check if client has time left to resume
+        if client.Time_Left.total_seconds() <= 0:
+            messages.warning(request, f'Device {device_name} has no time left to resume.')
+            return redirect('admin:app_clients_changelist')
+        
+        # Force start time countdown by setting Expire_On, regardless of WiFi connection
+        client.Expire_On = timezone.now() + client.Time_Left
+        client.Time_Left = client.Time_Left  # Keep the original Time_Left as backup
+        client.save()
+        
+        # Calculate time remaining for display
+        time_remaining = client.Time_Left
+        hours = int(time_remaining.total_seconds() // 3600)
+        minutes = int((time_remaining.total_seconds() % 3600) // 60)
+        
+        messages.success(request, f'Device {device_name} time resumed - {hours}h {minutes}m will now count down. Time will expire even if not connected to WiFi.')
+        
+        return redirect('admin:app_clients_changelist')
+
+    def changelist_view(self, request, extra_context=None):
+        """Add silent live refresh functionality to clients list"""
+        extra_context = extra_context or {}
+        extra_context.update({
+            'title': 'Clients Management - Live View',
+            'live_refresh_script': '''
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    if (!window.location.pathname.includes('/admin/app/clients/')) return;
+    
+    let refreshTimer;
+    
+    function refreshNow() {
+        const scrollY = window.scrollY;
+        
+        fetch(window.location.href, {
+            headers: { 'X-Requested-With': 'XMLHttpRequest' }
+        })
+        .then(response => response.text())
+        .then(html => {
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(html, 'text/html');
+            const newTable = doc.querySelector('#result_list');
+            const currentTable = document.querySelector('#result_list');
+            
+            if (newTable && currentTable) {
+                currentTable.innerHTML = newTable.innerHTML;
+            }
+            
+            window.scrollTo(0, scrollY);
+        })
+        .catch(error => {
+            console.error('Refresh failed:', error);
+        });
+    }
+    
+    function startAutoRefresh() {
+        if (refreshTimer) clearInterval(refreshTimer);
+        refreshTimer = setInterval(() => {
+            if (document.visibilityState === 'visible') {
+                refreshNow();
+            }
+        }, 1000);
+    }
+    
+    startAutoRefresh();
+    
+    document.addEventListener('visibilitychange', function() {
+        if (document.visibilityState === 'hidden') {
+            clearInterval(refreshTimer);
+        } else {
+            startAutoRefresh();
+        }
+    });
+});
+</script>
+            '''
+        })
+        return super().changelist_view(request, extra_context)
+
+    class Media:
+        js = ('admin/js/live_refresh.js',)
+        css = {
+            'all': ('admin/css/live_refresh.css',)
+        }
 
 
 class UnauthenticatedClientsAdmin(admin.ModelAdmin):
@@ -687,7 +998,7 @@ class SalesReportAdmin(admin.ModelAdmin):
 
 class SettingsAdmin(Singleton, admin.ModelAdmin):
     form = forms.SettingsForm
-    list_display = ('Hotspot_Name', 'Hotspot_Address', 'Slot_Timeout', 'Rate_Type', 'Base_Value', 'Inactive_Timeout', 'Coinslot_Pin', 'Light_Pin')
+    list_display = ('Hotspot_Name', 'Hotspot_Address', 'Slot_Timeout', 'Rate_Type', 'Base_Value', 'Inactive_Timeout', 'Default_Block_Duration', 'Enable_Permanent_Block', 'Coinslot_Pin', 'Light_Pin')
     
     def background_preview(self, obj):
         return obj.background_preview
@@ -793,19 +1104,40 @@ class CoinQueueAdmin(admin.ModelAdmin):
 
 
 class RatesAdmin(admin.ModelAdmin):
-    list_display = ('Edit', 'Denom', 'Pulse', 'Minutes')
+    list_display = ('Edit', 'Denom', 'Pulse', 'Minutes', 'validity_display')
     field_order = ('Minutes', 'Denom')
+    
+    fieldsets = (
+        ('Rate Configuration', {
+            'fields': ('Denom', 'Pulse', 'Minutes')
+        }),
+        ('Validity/Expiration Settings', {
+            'fields': ('Validity_Days', 'Validity_Hours'),
+            'description': 'Set how long purchased time remains valid. Leave both as 0 for no expiration.'
+        }),
+    )
+    
+    @admin.display(description='Validity Period')
+    def validity_display(self, obj):
+        """Display validity period in list view"""
+        from django.utils.html import format_html
+        validity_text = obj.get_validity_display()
+        
+        if validity_text == "No expiration":
+            return format_html('<span style="color: green;">No expiration</span>')
+        else:
+            return format_html('<span style="color: orange; font-weight: bold;">{}</span>', validity_text)
 
     def changelist_view(self, request, extra_context=None):
-        extra_context = {'title': 'Wifi Custom Rates'}
+        extra_context = {'title': 'WiFi Custom Rates & Validity Settings'}
         return super(RatesAdmin, self).changelist_view(request, extra_context=extra_context)
 
     def has_module_permission(self, *args, **kwargs):
-        settings = models.Settings.objects.get(pk=1)
-        if settings.Rate_Type == 'manual':
-            return  True
-        else:
-            return  False
+        try:
+            settings = models.Settings.objects.get(pk=1)
+            return settings.Rate_Type == 'manual'
+        except models.Settings.DoesNotExist:
+            return False
 
     def has_change_permission(self, request, *args, **kwargs):
         res = client_check(request)
@@ -829,18 +1161,228 @@ class DeviceAdmin(Singleton, admin.ModelAdmin):
         super(DeviceAdmin, self).save_model(request, obj, form, change)
 
 class VouchersAdmin(admin.ModelAdmin):
-    list_display = ('Voucher_code', 'Voucher_status', 'Voucher_client', 'Voucher_create_date_time', 'Voucher_used_date_time', 'Voucher_time_value')
-    readonly_fields = ('Voucher_code', 'Voucher_used_date_time')
+    list_display = ('Voucher_code', 'voucher_status_badge', 'Voucher_client', 'voucher_time_display', 'validity_display', 'Voucher_create_date_time', 'Voucher_used_date_time', 'days_until_expiry', 'action_buttons')
+    list_filter = ('Voucher_status', 'Voucher_create_date_time', 'Voucher_used_date_time')
+    search_fields = ('Voucher_code', 'Voucher_client')
+    readonly_fields = ('Voucher_used_date_time', 'Voucher_create_date_time')
+    list_per_page = 25
+    ordering = ('-Voucher_create_date_time',)
+    actions = ['generate_bulk_vouchers', 'mark_as_expired', 'delete_expired_vouchers']
+    
+    fieldsets = (
+        ('Voucher Information', {
+            'fields': ('Voucher_code', 'Voucher_status', 'Voucher_time_value')
+        }),
+        ('Validity/Expiration Settings', {
+            'fields': ('Validity_Days', 'Validity_Hours'),
+            'description': 'Set how long the voucher time remains valid after redemption. Leave both as 0 for no expiration.'
+        }),
+        ('Client Information', {
+            'fields': ('Voucher_client',)
+        }),
+        ('Timestamps', {
+            'fields': ('Voucher_create_date_time', 'Voucher_used_date_time'),
+            'classes': ('collapse',)
+        }),
+    )
+    
+    def get_fields(self, request, obj=None):
+        """Make Voucher_code editable only when creating new voucher"""
+        if obj:  # Editing existing voucher
+            self.readonly_fields = ('Voucher_code', 'Voucher_used_date_time', 'Voucher_create_date_time')
+        else:  # Creating new voucher
+            self.readonly_fields = ('Voucher_used_date_time', 'Voucher_create_date_time')
+        return super().get_fields(request, obj)
+    
+    def get_form(self, request, obj=None, **kwargs):
+        """Override form to show placeholder for new vouchers"""
+        form = super().get_form(request, obj, **kwargs)
+        if not obj:  # Creating new voucher
+            form.base_fields['Voucher_code'].initial = ''
+            form.base_fields['Voucher_code'].help_text = 'Leave blank to auto-generate a unique code'
+            form.base_fields['Voucher_code'].widget.attrs['placeholder'] = 'Auto-generated if left blank'
+        return form
+    
+    def save_model(self, request, obj, form, change):
+        """Handle voucher code generation for new vouchers"""
+        if not change and not obj.Voucher_code:  # New voucher without code
+            # Generate code once and save it
+            obj.Voucher_code = models.Vouchers.generate_code()
+        
+        # Show the actual code that will be saved
+        if not change:
+            messages.success(request, f'Voucher created with code: {obj.Voucher_code}')
+        
+        super().save_model(request, obj, form, change)
+    
+    @admin.display(description='Status')
+    def voucher_status_badge(self, obj):
+        from django.utils.html import format_html
+        color_map = {
+            'Not Used': '#28a745',
+            'Used': '#6c757d',
+            'Expired': '#dc3545'
+        }
+        color = color_map.get(obj.Voucher_status, '#6c757d')
+        return format_html(
+            '<span style="background-color: {}; color: white; padding: 3px 8px; border-radius: 3px; font-size: 12px; font-weight: bold;">{}</span>',
+            color, obj.Voucher_status
+        )
+    
+    @admin.display(description='Time Value')
+    def voucher_time_display(self, obj):
+        total_seconds = int(obj.Voucher_time_value.total_seconds())
+        hours = total_seconds // 3600
+        minutes = (total_seconds % 3600) // 60
+        return f"{hours}h {minutes}m"
+    
+    @admin.display(description='Validity Period')
+    def validity_display(self, obj):
+        """Display validity period in list view"""
+        from django.utils.html import format_html
+        validity_text = obj.get_validity_display()
+        
+        if validity_text == "No expiration":
+            return format_html('<span style="color: green;">No expiration</span>')
+        else:
+            return format_html('<span style="color: orange; font-weight: bold;">{}</span>', validity_text)
+    
+    @admin.display(description='Days Until Expiry')
+    def days_until_expiry(self, obj):
+        from django.utils import timezone
+        from datetime import timedelta
+        
+        if obj.Voucher_status == 'Used' or obj.Voucher_status == 'Expired':
+            return '-'
+        
+        expiry_date = obj.Voucher_create_date_time + timedelta(days=30)
+        days_left = (expiry_date - timezone.now()).days
+        
+        if days_left < 0:
+            return 'Expired'
+        elif days_left <= 3:
+            return format_html('<span style="color: red; font-weight: bold;">{} days</span>', days_left)
+        elif days_left <= 7:
+            return format_html('<span style="color: orange; font-weight: bold;">{} days</span>', days_left)
+        else:
+            return f"{days_left} days"
+    
+    def action_buttons(self, obj):
+        from django.utils.html import format_html
+        buttons = []
+        
+        if obj.Voucher_status == 'Not Used':
+            buttons.append(format_html(
+                '<a class="button" href="/admin/app/vouchers/{}/expire/" '
+                'onclick="return confirm(\'Mark this voucher as expired?\');" '
+                'style="background-color: #dc3545; color: white; padding: 4px 8px; text-decoration: none; border-radius: 3px; margin: 1px; font-size: 11px;">'
+                '<i class="fas fa-times" style="margin-right: 3px;"></i>Expire</a>',
+                obj.pk
+            ))
+        
+        buttons.append(format_html(
+            '<a class="button" href="/admin/app/vouchers/{}/change/" '
+            'style="background-color: #007bff; color: white; padding: 4px 8px; text-decoration: none; border-radius: 3px; margin: 1px; font-size: 11px;">'
+            '<i class="fas fa-eye" style="margin-right: 3px;"></i>View</a>',
+            obj.pk
+        ))
+        
+        return format_html(' '.join(buttons))
+    
+    action_buttons.short_description = 'Actions'
+    
+    def generate_bulk_vouchers(self, request, queryset):
+        from django.shortcuts import redirect
+        from django.contrib import messages
+        from datetime import timedelta
+        
+        count = 10
+        time_value = timedelta(hours=1)
+        validity_days = 7  # Default 7 days validity for bulk vouchers
+        
+        created_vouchers = []
+        for i in range(count):
+            # Generate the code explicitly first
+            voucher_code = models.Vouchers.generate_code()
+            
+            # Create voucher with the specific code
+            voucher = models.Vouchers.objects.create(
+                Voucher_code=voucher_code,
+                Voucher_status='Not Used',
+                Voucher_time_value=time_value,
+                Validity_Days=validity_days,
+                Validity_Hours=0
+            )
+            created_vouchers.append(voucher_code)
+        
+        messages.success(request, f'Successfully created {count} vouchers (1 hour each, {validity_days} days validity): {", ".join(created_vouchers)}')
+        return redirect(request.get_full_path())
+    
+    generate_bulk_vouchers.short_description = "Generate 10 new vouchers (1 hour each, 7 days validity)"
+    
+    def mark_as_expired(self, request, queryset):
+        from django.contrib import messages
+        updated = queryset.filter(Voucher_status='Not Used').update(Voucher_status='Expired')
+        messages.success(request, f'Successfully marked {updated} vouchers as expired.')
+    
+    mark_as_expired.short_description = "Mark selected vouchers as expired"
+    
+    def delete_expired_vouchers(self, request, queryset):
+        from django.contrib import messages
+        expired_vouchers = queryset.filter(Voucher_status='Expired')
+        count = expired_vouchers.count()
+        expired_vouchers.delete()
+        messages.success(request, f'Successfully deleted {count} expired vouchers.')
+    
+    delete_expired_vouchers.short_description = "Delete expired vouchers"
+
+    def get_urls(self):
+        from django.urls import path
+        urls = super().get_urls()
+        custom_urls = [
+            path('<int:voucher_id>/expire/', self.admin_site.admin_view(self.expire_voucher_view), name='vouchers_expire'),
+        ]
+        return custom_urls + urls
+
+    def expire_voucher_view(self, request, voucher_id):
+        from django.shortcuts import get_object_or_404, redirect
+        from django.contrib import messages
+        from django.utils import timezone
+        
+        voucher = get_object_or_404(models.Vouchers, pk=voucher_id)
+        
+        if voucher.Voucher_status == 'Not Used':
+            voucher.Voucher_status = 'Expired'
+            voucher.save()
+            messages.success(request, f'Voucher {voucher.Voucher_code} has been marked as expired.')
+        else:
+            messages.warning(request, f'Voucher {voucher.Voucher_code} cannot be expired (current status: {voucher.Voucher_status}).')
+        
+        return redirect('admin:app_vouchers_changelist')
 
     def changelist_view(self, request, extra_context=None):
-        extra_context = {'title': 'Wifi Vouchers'}
+        from django.db.models import Count, Q
+        
+        stats = models.Vouchers.objects.aggregate(
+            total=Count('id'),
+            not_used=Count('id', filter=Q(Voucher_status='Not Used')),
+            used=Count('id', filter=Q(Voucher_status='Used')),
+            expired=Count('id', filter=Q(Voucher_status='Expired'))
+        )
+        
+        extra_context = extra_context or {}
+        extra_context.update({
+            'title': 'WiFi Vouchers Management',
+            'voucher_stats': stats,
+            'subtitle': f"Total: {stats['total']} | Available: {stats['not_used']} | Used: {stats['used']} | Expired: {stats['expired']}"
+        })
         return super(VouchersAdmin, self).changelist_view(request, extra_context=extra_context)
 
     def has_module_permission(self, *args, **kwargs):
-        settings = models.Settings.objects.get(pk=1)
-        if settings.Vouchers_Flg:
-            return True
-        else:
+        try:
+            settings = models.Settings.objects.get(pk=1)
+            return settings.Vouchers_Flg
+        except models.Settings.DoesNotExist:
             return False
 
 # PushNotificationsAdmin removed for personal use
@@ -894,11 +1436,33 @@ class TrafficMonitorAdmin(admin.ModelAdmin):
         return False
 
 class BlockedDevicesAdmin(admin.ModelAdmin):
-    list_display = ('MAC_Address', 'Device_Name', 'Block_Reason', 'Blocked_Date', 'TTL_Violations_Count', 'Is_Active')
-    list_filter = ('Block_Reason', 'Is_Active', 'Blocked_Date')
+    list_display = ('MAC_Address', 'Device_Name', 'Block_Reason', 'block_type_display', 'Blocked_Date', 'unblock_date_display', 'TTL_Violations_Count', 'Is_Active')
+    list_filter = ('Block_Reason', 'Is_Active', 'Is_Permanent', 'Blocked_Date')
     search_fields = ('MAC_Address', 'Device_Name')
     readonly_fields = ('Blocked_Date', 'TTL_Violations_Count')
     actions = ['unblock_devices', 'block_devices']
+    
+    def block_type_display(self, obj):
+        if obj.Is_Permanent:
+            return format_html('<span style="color: #6f42c1; font-weight: bold;"><i class="fas fa-lock"></i> Permanent</span>')
+        else:
+            return format_html('<span style="color: #dc3545;"><i class="fas fa-clock"></i> Temporary</span>')
+    block_type_display.short_description = 'Block Type'
+    block_type_display.allow_tags = True
+    
+    def unblock_date_display(self, obj):
+        if obj.Is_Permanent:
+            return format_html('<span style="color: #6f42c1;">Never (Permanent)</span>')
+        elif obj.Auto_Unblock_After:
+            if obj.is_block_expired():
+                return format_html('<span style="color: #28a745;">Expired</span>')
+            else:
+                formatted_date = obj.Auto_Unblock_After.strftime('%B %d, %Y %I:%M %p')
+                return format_html('<span style="color: #dc3545;">{}</span>', formatted_date)
+        else:
+            return format_html('<span style="color: #6c757d;">Not Set</span>')
+    unblock_date_display.short_description = 'Unblock Date'
+    unblock_date_display.allow_tags = True
 
     def changelist_view(self, request, extra_context=None):
         extra_context = {'title': 'Blocked Devices'}

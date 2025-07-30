@@ -1,0 +1,523 @@
+/* Reset and Base Styles */
+* {
+    box-sizing: border-box;
+}
+
+body {
+    min-height: 100vh;
+    background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    position: relative;
+}
+
+/* Remove any potential overlay blocking interactions */
+.card-captive::before,
+.card-captive::after {
+    display: none !important;
+}
+
+/* Ensure all interactive elements are clickable */
+button, a, input, select, textarea {
+    pointer-events: auto !important;
+    position: relative;
+    z-index: 10;
+}
+
+/* Main Container */
+.container {
+    padding: 0;
+    margin: 0 auto;
+    width: 100%;
+    max-width: 100%;
+}
+
+/* Card Styles */
+.card-captive {
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(10px);
+    box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.37);
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    border-radius: 20px;
+    overflow: visible;
+    width: 100%;
+    max-width: 450px;
+    margin: 20px auto;
+    transition: all 0.3s ease;
+    position: relative;
+    z-index: 1;
+}
+
+.card-body {
+    padding: 0;
+}
+
+.card-footer {
+    background: rgba(255, 255, 255, 0.8);
+    border-top: 1px solid rgba(0, 0, 0, 0.1);
+    padding: 1rem;
+    text-align: center;
+}
+
+/* Header Image */
+.card-body img.img-fluid {
+    width: 100%;
+    height: auto;
+    max-height: 250px;
+    object-fit: cover;
+}
+
+/* Progress Bar */
+.progress {
+    height: 6px;
+    border-radius: 0;
+    background: rgba(0, 0, 0, 0.1);
+}
+
+.slot_countdown {
+    transition: width 0.3s ease;
+}
+
+/* Content Area */
+.inner {
+    padding: 1.5rem;
+}
+
+/* Typography */
+.text-info {
+    color: #2196F3 !important;
+    font-size: 1.2rem;
+    font-weight: 600;
+}
+
+.text-success {
+    color: #4CAF50 !important;
+}
+
+.text-danger {
+    color: #f44336 !important;
+}
+
+.text-warning {
+    color: #FF9800 !important;
+}
+
+/* Button Styles */
+.btn {
+    border-radius: 25px;
+    padding: 0.6rem 1.5rem;
+    font-weight: 500;
+    transition: all 0.3s ease;
+    text-transform: none;
+    letter-spacing: 0.5px;
+    position: relative;
+    z-index: 1;
+    cursor: pointer;
+}
+
+.btn-insert-coin-new {
+    background: linear-gradient(135deg, #FF6B6B 0%, #EE5A6F 100%);
+    color: white;
+    font-weight: bold;
+    font-size: 1.2rem;
+    padding: 1rem 2.5rem;
+    border: none;
+    border-radius: 50px;
+    box-shadow: 0 4px 15px 0 rgba(238, 90, 111, 0.4);
+    transition: all 0.3s ease;
+    cursor: pointer;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin: 1rem 0;
+}
+
+.btn-insert-coin-new:hover {
+    background: linear-gradient(135deg, #FF8787 0%, #F06292 100%);
+    box-shadow: 0 6px 20px 0 rgba(238, 90, 111, 0.5);
+    transform: translateY(-2px);
+}
+
+.btn-insert-coin-new:active {
+    transform: translateY(0);
+    box-shadow: 0 2px 10px 0 rgba(238, 90, 111, 0.4);
+}
+
+.btn-insert-coin-new i {
+    margin-right: 10px;
+    font-size: 1.3rem;
+}
+
+.btn-done {
+    min-width: 200px;
+    margin: 0.5rem 0;
+}
+
+.btn-outline-default {
+    background: #f5f5f5;
+    border: 2px solid #ddd;
+    color: #999;
+}
+
+.btn-outline-success {
+    background: white;
+    border: 2px solid #4CAF50;
+    color: #4CAF50;
+}
+
+.btn-outline-success:hover {
+    background: #4CAF50;
+    color: white;
+}
+
+.btn-success {
+    background: #4CAF50;
+    border: none;
+    color: white;
+}
+
+.btn-success:hover {
+    background: #45a049;
+}
+
+.btn-danger {
+    background: #f44336;
+    border: none;
+    color: white;
+}
+
+.btn-danger:hover {
+    background: #da190b;
+}
+
+.btn-info {
+    background: #2196F3;
+    border: none;
+    color: white;
+}
+
+.btn-info:hover {
+    background: #0b7dda;
+}
+
+.btn-warning {
+    background: #FF9800;
+    border: none;
+    color: white;
+}
+
+.btn-warning:hover {
+    background: #e68900;
+}
+
+.btn-primary {
+    background: #673AB7;
+    border: none;
+    color: white;
+}
+
+.btn-primary:hover {
+    background: #5e35b1;
+}
+
+/* Modal Styles */
+.modal {
+    z-index: 1050;
+}
+
+.modal-backdrop {
+    z-index: 1040;
+    background-color: rgba(0, 0, 0, 0.5);
+}
+
+.modal-backdrop.show {
+    opacity: 0.5;
+}
+
+.modal.show {
+    display: block !important;
+}
+
+.modal-dialog {
+    z-index: 1055;
+    position: relative;
+}
+
+.modal-content {
+    border-radius: 15px;
+    border: none;
+    box-shadow: 0 5px 20px rgba(0, 0, 0, 0.3);
+    background-color: #ffffff;
+    position: relative;
+    z-index: 1060;
+}
+
+.modal-header {
+    border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+    padding: 1rem 1.5rem;
+    background-color: #ffffff;
+}
+
+.modal-header .modal-title {
+    color: #333;
+    font-weight: 600;
+}
+
+.modal-header .close {
+    color: #333;
+    opacity: 0.5;
+    z-index: 1070;
+}
+
+.modal-header .close:hover {
+    color: #000;
+    opacity: 0.8;
+}
+
+.modal-body {
+    padding: 1.5rem;
+    background-color: #ffffff;
+}
+
+.modal-footer {
+    border-top: 1px solid rgba(0, 0, 0, 0.1);
+    padding: 1rem;
+    background-color: #ffffff;
+}
+
+/* Form Elements */
+.form-control {
+    border-radius: 20px;
+    border: 1px solid #ddd;
+    padding: 0.5rem 1rem;
+}
+
+.input-group {
+    border-radius: 20px;
+    overflow: hidden;
+}
+
+.input-group-text {
+    background: #f8f9fa;
+    border: none;
+}
+
+/* Table Styles */
+.table {
+    margin-bottom: 0;
+    background-color: transparent;
+}
+
+.table td, .table th {
+    padding: 0.5rem;
+    vertical-align: middle;
+    background-color: transparent;
+    color: #333;
+}
+
+.table thead th {
+    border-bottom: 2px solid #dee2e6;
+    font-weight: 600;
+}
+
+.table-condensed td, .table-condensed th {
+    padding: 0.3rem;
+}
+
+/* Modal Table Fix */
+.modal-body .table {
+    background-color: white;
+}
+
+.modal-body .table td, 
+.modal-body .table th {
+    color: #333;
+}
+
+/* Animation Classes */
+.animated {
+    animation-duration: 0.5s;
+    animation-fill-mode: both;
+}
+
+.fadeIn {
+    animation-name: fadeIn;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
+}
+
+.blinking {
+    animation: blinkingText 0.8s infinite;
+}
+
+@keyframes blinkingText {
+    50% {
+        color: transparent;
+    }
+}
+
+/* Loader */
+.loader {
+    position: relative;
+    text-align: center;
+    margin: 15px auto 35px auto;
+    z-index: 9999;
+    display: block;
+    width: 60px;
+    height: 60px;
+    border: 5px solid rgba(0, 0, 0, 0.1);
+    border-radius: 50%;
+    border-top-color: #2196F3;
+    animation: spin 1s ease-in-out infinite;
+}
+
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+/* Responsive Design */
+@media (max-width: 576px) {
+    /* Mobile styles */
+    body {
+        background-attachment: fixed;
+    }
+    
+    .card-captive {
+        max-width: 100%;
+        margin: 0;
+        border-radius: 0;
+        min-height: 100vh;
+    }
+    
+    .card-body img.img-fluid {
+        max-height: 180px;
+    }
+    
+    .inner {
+        padding: 1rem;
+    }
+    
+    .btn {
+        width: 100%;
+        margin: 0.25rem 0;
+    }
+    
+    .btn-insert-coin-new {
+        width: 100%;
+        padding: 1rem;
+        font-size: 1.1rem;
+    }
+    
+    .row .col-sm-6 {
+        padding: 0 0.25rem;
+    }
+    
+    .modal-dialog {
+        margin: 0.5rem;
+        max-width: calc(100% - 1rem);
+    }
+    
+    .text-info {
+        font-size: 1.1rem;
+    }
+    
+    h6 {
+        font-size: 0.9rem;
+    }
+    
+    small {
+        font-size: 0.8rem;
+    }
+    
+    .btn-sm {
+        padding: 0.4rem 1rem;
+        font-size: 0.875rem;
+    }
+}
+
+@media (min-width: 577px) and (max-width: 768px) {
+    /* Tablet styles */
+    .card-captive {
+        max-width: 500px;
+        margin: 30px auto;
+    }
+    
+    .btn-extend, .btn-pause-resume {
+        width: auto;
+        min-width: 150px;
+    }
+}
+
+@media (min-width: 769px) {
+    /* Desktop styles */
+    .card-captive {
+        margin: 50px auto;
+    }
+    
+    .btn-extend, .btn-pause-resume {
+        min-width: 160px;
+    }
+}
+
+/* Utility Classes */
+.bg-gray {
+    background-color: #585757;
+}
+
+.btn-rounded {
+    border-radius: 25px !important;
+}
+
+.btn-normal {
+    text-transform: none !important;
+}
+
+.mx-auto {
+    margin-left: auto !important;
+    margin-right: auto !important;
+}
+
+.text-center {
+    text-align: center !important;
+}
+
+.mt-2 {
+    margin-top: 0.5rem !important;
+}
+
+.my-2 {
+    margin-top: 0.5rem !important;
+    margin-bottom: 0.5rem !important;
+}
+
+.mb-2 {
+    margin-bottom: 0.5rem !important;
+}
+
+/* Custom scrollbar for webkit browsers */
+::-webkit-scrollbar {
+    width: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: #f1f1f1;
+}
+
+::-webkit-scrollbar-thumb {
+    background: #888;
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: #555;
+}

@@ -1,0 +1,699 @@
+/* System Update Admin Styles */
+
+/* Loading Overlay */
+#update-loading-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.7);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 10000;
+}
+
+.loading-content {
+    background: white;
+    padding: 30px;
+    border-radius: 10px;
+    text-align: center;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+}
+
+.loading-content p {
+    margin: 0;
+    color: #333;
+    font-size: 16px;
+}
+
+/* Progress Bars */
+.progress {
+    background-color: #e9ecef;
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.progress-bar {
+    transition: width 0.3s ease;
+    font-size: 12px;
+    font-weight: 600;
+    text-align: center;
+    line-height: 20px;
+}
+
+/* Action Buttons */
+.action-buttons .btn {
+    margin-right: 5px;
+    margin-bottom: 2px;
+    font-size: 11px;
+    padding: 3px 8px;
+    border-radius: 3px;
+    white-space: nowrap;
+    min-width: 60px;
+    text-align: center;
+}
+
+.action-buttons .btn-primary {
+    background-color: #007bff;
+    border-color: #007bff;
+}
+
+.action-buttons .btn-success {
+    background-color: #28a745;
+    border-color: #28a745;
+}
+
+.action-buttons .btn-warning {
+    background-color: #ffc107;
+    border-color: #ffc107;
+    color: #212529;
+}
+
+.action-buttons .btn-danger {
+    background-color: #dc3545;
+    border-color: #dc3545;
+}
+
+.action-buttons .btn-info {
+    background-color: #17a2b8;
+    border-color: #17a2b8;
+    color: white;
+}
+
+.action-buttons .btn-outline-danger {
+    color: #dc3545;
+    border-color: #dc3545;
+    background-color: transparent;
+}
+
+.action-buttons .btn-outline-danger:hover {
+    color: white;
+    background-color: #dc3545;
+    border-color: #dc3545;
+}
+
+/* Button grouping for better layout */
+.action-buttons {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-width: 200px;
+}
+
+/* Responsive button sizing */
+@media (max-width: 1200px) {
+    .action-buttons .btn {
+        font-size: 10px;
+        padding: 2px 6px;
+        margin-right: 3px;
+        min-width: 50px;
+    }
+}
+
+@media (max-width: 992px) {
+    .action-buttons .btn {
+        font-size: 9px;
+        padding: 1px 4px;
+        margin-right: 2px;
+        min-width: 45px;
+    }
+}
+
+/* Button icons */
+.btn i {
+    margin-right: 3px;
+}
+
+/* Loading state for buttons */
+.btn.loading {
+    position: relative;
+    pointer-events: none;
+}
+
+.btn.loading::after {
+    content: '';
+    position: absolute;
+    width: 16px;
+    height: 16px;
+    top: 50%;
+    left: 50%;
+    margin-left: -8px;
+    margin-top: -8px;
+    border: 2px solid transparent;
+    border-top-color: currentColor;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* Status Indicators */
+.status-indicator {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+.status-checking {
+    background-color: #6c757d;
+    color: white;
+}
+
+.status-available {
+    background-color: #17a2b8;
+    color: white;
+}
+
+.status-downloading {
+    background-color: #ffc107;
+    color: #212529;
+}
+
+.status-ready {
+    background-color: #28a745;
+    color: white;
+}
+
+.status-installing {
+    background-color: #fd7e14;
+    color: white;
+}
+
+.status-completed {
+    background-color: #28a745;
+    color: white;
+}
+
+.status-failed {
+    background-color: #dc3545;
+    color: white;
+}
+
+.status-rollback {
+    background-color: #6f42c1;
+    color: white;
+}
+
+/* Update Information Cards */
+.update-info-card {
+    background: #f8f9fa;
+    border: 1px solid #dee2e6;
+    border-radius: 6px;
+    padding: 15px;
+    margin-bottom: 10px;
+}
+
+.update-version {
+    font-size: 18px;
+    font-weight: 600;
+    color: #495057;
+    margin-bottom: 5px;
+}
+
+.update-title {
+    font-size: 14px;
+    color: #6c757d;
+    margin-bottom: 10px;
+}
+
+.update-description {
+    font-size: 13px;
+    color: #495057;
+    line-height: 1.4;
+}
+
+/* Check Updates Button */
+.check-updates-btn {
+    background: linear-gradient(45deg, #007bff, #0056b3);
+    border: none;
+    color: white;
+    padding: 8px 16px;
+    border-radius: 4px;
+    font-size: 13px;
+    margin-left: 10px;
+    transition: all 0.3s ease;
+}
+
+.check-updates-btn:hover {
+    background: linear-gradient(45deg, #0056b3, #003d82);
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(0, 123, 255, 0.3);
+}
+
+.check-updates-btn i {
+    margin-right: 5px;
+}
+
+/* Update Statistics */
+.update-stats {
+    display: flex;
+    gap: 20px;
+    margin-bottom: 20px;
+    padding: 15px;
+    background: #f8f9fa;
+    border-radius: 6px;
+}
+
+.stat-item {
+    text-align: center;
+    flex: 1;
+}
+
+.stat-number {
+    font-size: 24px;
+    font-weight: 600;
+    color: #007bff;
+    display: block;
+}
+
+.stat-label {
+    font-size: 12px;
+    color: #6c757d;
+    text-transform: uppercase;
+    margin-top: 2px;
+}
+
+/* Download Progress Detail */
+.download-detail {
+    font-size: 11px;
+    color: #6c757d;
+    margin-top: 2px;
+}
+
+/* Error Messages */
+.error-message {
+    background-color: #f8d7da;
+    color: #721c24;
+    padding: 8px 12px;
+    border-radius: 4px;
+    font-size: 12px;
+    margin-top: 5px;
+}
+
+/* Success Messages */
+.success-message {
+    background-color: #d4edda;
+    color: #155724;
+    padding: 8px 12px;
+    border-radius: 4px;
+    font-size: 12px;
+    margin-top: 5px;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .action-buttons .btn {
+        font-size: 10px;
+        padding: 2px 6px;
+        margin-right: 2px;
+    }
+    
+    .progress {
+        width: 100px;
+        height: 16px;
+    }
+    
+    .progress-bar {
+        font-size: 10px;
+        line-height: 16px;
+    }
+    
+    .update-stats {
+        flex-direction: column;
+        gap: 10px;
+    }
+    
+    .check-updates-btn {
+        font-size: 11px;
+        padding: 6px 12px;
+    }
+}
+
+/* Animation for progress bars */
+@keyframes progress-animation {
+    0% {
+        background-position: 0 0;
+    }
+    100% {
+        background-position: 30px 0;
+    }
+}
+
+.progress-bar.animated {
+    background-image: linear-gradient(
+        45deg,
+        rgba(255, 255, 255, 0.15) 25%,
+        transparent 25%,
+        transparent 50%,
+        rgba(255, 255, 255, 0.15) 50%,
+        rgba(255, 255, 255, 0.15) 75%,
+        transparent 75%,
+        transparent
+    );
+    background-size: 30px 30px;
+    animation: progress-animation 2s linear infinite;
+}
+
+/* Tooltip styles for buttons */
+.btn[title] {
+    position: relative;
+}
+
+.btn[title]:hover::after {
+    content: attr(title);
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #333;
+    color: white;
+    padding: 4px 8px;
+    border-radius: 3px;
+    font-size: 11px;
+    white-space: nowrap;
+    z-index: 1000;
+}
+
+/* Version Badges */
+.current-version-badge {
+    font-weight: 600;
+    color: #155724;
+}
+
+.current-version-label {
+    display: inline-block;
+    background: #d4edda;
+    color: #155724;
+    padding: 2px 6px;
+    border-radius: 12px;
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    margin-left: 5px;
+    border: 1px solid #c3e6cb;
+}
+
+.newer-version-badge {
+    font-weight: 600;
+    color: #004085;
+}
+
+.newer-version-label {
+    display: inline-block;
+    background: #cce7ff;
+    color: #004085;
+    padding: 2px 6px;
+    border-radius: 12px;
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    margin-left: 5px;
+    border: 1px solid #b6d7ff;
+    animation: pulse-blue 2s ease-in-out infinite;
+}
+
+.installed-version-badge {
+    font-weight: 600;
+    color: #0c5460;
+}
+
+.installed-version-label {
+    display: inline-block;
+    background: #d1ecf1;
+    color: #0c5460;
+    padding: 2px 6px;
+    border-radius: 12px;
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    margin-left: 5px;
+    border: 1px solid #bee5eb;
+}
+
+@keyframes pulse-blue {
+    0%, 100% {
+        opacity: 1;
+        transform: scale(1);
+    }
+    50% {
+        opacity: 0.8;
+        transform: scale(1.05);
+    }
+}
+
+/* Current Version Display in Header */
+.current-version-info {
+    background: linear-gradient(135deg, #28a745, #20c997);
+    color: white;
+    padding: 15px 20px;
+    border-radius: 8px;
+    margin-bottom: 20px;
+    box-shadow: 0 2px 10px rgba(40, 167, 69, 0.2);
+}
+
+.version-info-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 15px;
+    align-items: center;
+}
+
+.version-info-item {
+    text-align: center;
+}
+
+.version-info-item h3 {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 600;
+}
+
+.version-info-item p {
+    margin: 5px 0 0 0;
+    font-size: 12px;
+    opacity: 0.9;
+}
+
+.version-status-badge {
+    display: inline-block;
+    padding: 4px 8px;
+    border-radius: 15px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    margin-top: 5px;
+}
+
+.status-up-to-date {
+    background: rgba(255, 255, 255, 0.2);
+    color: white;
+}
+
+.status-updates-available {
+    background: #ffc107;
+    color: #212529;
+    animation: pulse-yellow 2s ease-in-out infinite;
+}
+
+@keyframes pulse-yellow {
+    0%, 100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.8;
+    }
+}
+
+/* Update Statistics */
+.update-stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+    gap: 10px;
+    margin-top: 10px;
+}
+
+.stat-box {
+    background: rgba(255, 255, 255, 0.1);
+    padding: 8px;
+    border-radius: 6px;
+    text-align: center;
+}
+
+.stat-number {
+    font-size: 20px;
+    font-weight: 600;
+    display: block;
+}
+
+.stat-label {
+    font-size: 10px;
+    opacity: 0.8;
+    text-transform: uppercase;
+}
+
+/* Update changelog styling */
+.changelog {
+    max-height: 200px;
+    overflow-y: auto;
+    background: #f8f9fa;
+    padding: 10px;
+    border-radius: 4px;
+    font-size: 12px;
+    line-height: 1.4;
+}
+
+.changelog ul {
+    margin: 0;
+    padding-left: 20px;
+}
+
+.changelog li {
+    margin-bottom: 3px;
+}
+
+/* Terminal/Console Styles */
+#installation-terminal {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 80%;
+    max-width: 800px;
+    height: 60%;
+    background: #1e1e1e;
+    border-radius: 8px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+    z-index: 10001;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.terminal-header {
+    background: #2d2d2d;
+    color: white;
+    padding: 12px 16px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid #3d3d3d;
+}
+
+.terminal-header h4 {
+    margin: 0;
+    font-size: 14px;
+    font-weight: 600;
+}
+
+.terminal-header h4 i {
+    margin-right: 8px;
+    color: #4CAF50;
+}
+
+.terminal-header .btn-close {
+    background: none;
+    border: none;
+    color: #ccc;
+    font-size: 18px;
+    cursor: pointer;
+    padding: 0;
+    width: 20px;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.terminal-header .btn-close:hover {
+    color: white;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 3px;
+}
+
+.terminal-header .btn-close::after {
+    content: '×';
+}
+
+.terminal-body {
+    flex: 1;
+    padding: 16px;
+    overflow: hidden;
+}
+
+#terminal-content {
+    height: 100%;
+    overflow-y: auto;
+    font-family: 'Courier New', 'Monaco', monospace;
+    font-size: 12px;
+    line-height: 1.4;
+    color: #00ff00;
+    background: transparent;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+}
+
+#terminal-content::-webkit-scrollbar {
+    width: 8px;
+}
+
+#terminal-content::-webkit-scrollbar-track {
+    background: #2d2d2d;
+}
+
+#terminal-content::-webkit-scrollbar-thumb {
+    background: #4d4d4d;
+    border-radius: 4px;
+}
+
+#terminal-content::-webkit-scrollbar-thumb:hover {
+    background: #5d5d5d;
+}
+
+/* Loading button styles */
+.btn .fa-spinner {
+    margin-right: 5px;
+}
+
+.btn:disabled {
+    opacity: 0.7;
+    cursor: not-allowed;
+}
+
+/* Enhanced progress bar animations */
+.progress-bar.downloading {
+    background: linear-gradient(45deg, #ffc107, #ffad07);
+    animation: progress-pulse 2s ease-in-out infinite;
+}
+
+@keyframes progress-pulse {
+    0%, 100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.8;
+    }
+}
+
+/* Mobile responsive terminal */
+@media (max-width: 768px) {
+    #installation-terminal {
+        width: 95%;
+        height: 70%;
+    }
+    
+    .terminal-header h4 {
+        font-size: 12px;
+    }
+    
+    #terminal-content {
+        font-size: 10px;
+    }
+}

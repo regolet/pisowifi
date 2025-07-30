@@ -23,7 +23,9 @@
       "Bash(ls:*)",
       "Bash(sed:*)",
       "Bash(curl:*)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(touch:*)",
+      "Bash(git commit:*)"
     ],
     "deny": []
   }

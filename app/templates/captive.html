@@ -12,22 +12,18 @@
         body {
             background: linear-gradient(135deg, #007bff 0%, #0056b3 100%);
             min-height: 100vh;
-            display: flex;
-            align-items: center;
-            justify-content: center;
+            margin: 0;
+            padding: 0;
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
         }
-        .portal-container {
+        .content-wrapper {
             background: white;
-            border-radius: 15px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
-            padding: 40px;
-            max-width: 500px;
-            width: 90%;
+            min-height: 100vh;
+            width: 100%;
         }
         .portal-header {
             text-align: center;
-            margin-bottom: 30px;
+            margin-bottom: 0;
         }
         .portal-header h1 {
             color: #333;
@@ -41,9 +37,10 @@
         .status-card {
             background: #f8f9fa;
             border: 1px solid #e9ecef;
-            border-radius: 10px;
-            padding: 20px;
-            margin-bottom: 20px;
+            border-radius: 0;
+            padding: 30px 20px;
+            margin: 0 20px 20px 20px;
+            box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
         }
         .status-item {
             display: flex;
@@ -63,12 +60,12 @@
             color: #007bff;
         }
         .btn-portal {
-            width: 100%;
+            width: calc(100% - 40px);
+            margin: 0 20px 10px 20px;
             padding: 12px;
             font-size: 1.1rem;
             font-weight: 600;
             border-radius: 8px;
-            margin-bottom: 10px;
         }
         .wifi-icon {
             font-size: 3rem;
@@ -89,11 +86,27 @@
     </style>
 </head>
 <body>
-    <div class="portal-container">
+    <div class="content-wrapper">
         <div class="portal-header">
-            <i class="fas fa-wifi wifi-icon"></i>
-            <h1>PISOWifi Portal</h1>
-            <p>Welcome to the internet access portal</p>
+            <div class="banner-carousel" style="position: relative; width: 100%; height: 250px; margin-bottom: 0; overflow: hidden;">
+                {% for image in banner_images %}
+                <img src="{% static 'background/1/' %}{{ image }}" alt="Banner {{ forloop.counter }}" class="carousel-slide {% if forloop.first %}active{% endif %}" 
+                     style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; opacity: {% if forloop.first %}1{% else %}0{% endif %}; transition: opacity 1s ease-in-out;" />
+                {% empty %}
+                <!-- Fallback image if no banner images found -->
+                <img src="{% static 'background/1/ml.jpg' %}" alt="Default Banner" class="carousel-slide active" 
+                     style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; opacity: 1; transition: opacity 1s ease-in-out;" />
+                {% endfor %}
+                
+                <!-- Carousel indicators (only show if more than 1 image) -->
+                {% if banner_images|length > 1 %}
+                <div class="carousel-indicators" style="position: absolute; bottom: 10px; left: 50%; transform: translateX(-50%); display: flex; gap: 8px;">
+                    {% for image in banner_images %}
+                    <div class="indicator {% if forloop.first %}active{% endif %}" style="width: 8px; height: 8px; border-radius: 50%; background: rgba(255,255,255,{% if forloop.first %}0.8{% else %}0.4{% endif %}); cursor: pointer; transition: background 0.3s;"></div>
+                    {% endfor %}
+                </div>
+                {% endif %}
+            </div>
         </div>
 
         {% if status == 'Blocked' %}
@@ -108,23 +121,7 @@
         {% else %}
         
         <div class="status-card text-center">
-            <div class="d-flex justify-content-center align-items-center gap-3 mb-3">
-                <div class="status-label" style="font-size: 0.85rem;">
-                    <i class="fas fa-globe me-1"></i>Internet Status
-                </div>
-                <div>
-                    {% if internet_connected %}
-                        <span class="badge bg-success" style="font-size: 0.75rem;"><i class="fas fa-check-circle me-1"></i>Online</span>
-                    {% else %}
-                        <span class="badge bg-danger" style="font-size: 0.75rem;"><i class="fas fa-times-circle me-1"></i>No Internet</span>
-                    {% endif %}
-                </div>
-            </div>
-            
             <div class="mb-4">
-                <div class="status-label">
-                    <i class="fas fa-laptop me-2"></i>Device Status
-                </div>
                 <div style="font-size: 2.5rem; font-weight: bold;">
                     {% if status == 'Connected' %}
                         <span style="color: #28a745;"><i class="fas fa-check-circle me-2"></i>Connected</span>
@@ -136,34 +133,74 @@
                 </div>
             </div>
             
-            <div class="mb-4">
-                <div class="status-label">
-                    <i class="fas fa-clock me-2"></i>Time Remaining
-                </div>
-                <div style="font-size: 1.8rem; font-weight: bold; color: #007bff;">
-                    {% if time_left > 0 %}
-                        <span id="timeLeft" data-seconds="{{ time_left }}">{{ time_left }}</span>
-                    {% else %}
-                        <span style="color: #6c757d;">0d 0hr 0m 0s</span>
-                    {% endif %}
+            <!-- System Status Information -->
+            <div class="mb-0">
+                <div class="row">
+                    <div class="col-6">
+                        <div class="d-flex justify-content-center align-items-center gap-2">
+                            <div class="status-label" style="font-size: 0.85rem;">
+                                <i class="fas fa-globe me-1"></i>Internet
+                            </div>
+                            <div>
+                                {% if internet_connected %}
+                                    <span class="badge bg-success" style="font-size: 0.75rem;"><i class="fas fa-check-circle me-1"></i>{{ internet_connected|yesno:"Online,Offline" }}</span>
+                                {% else %}
+                                    <span class="badge bg-danger" style="font-size: 0.75rem;"><i class="fas fa-times-circle me-1"></i>Offline</span>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-6">
+                        <div class="d-flex justify-content-center align-items-center gap-2">
+                            <div class="status-label" style="font-size: 0.85rem;">
+                                <i class="fas fa-pause me-1"></i>AutoPause
+                            </div>
+                            <div>
+                                {% if pause_resume_flg == 1 %}
+                                    <span class="badge bg-info" style="font-size: 0.75rem;"><i class="fas fa-check-circle me-1"></i>Enabled</span>
+                                {% else %}
+                                    <span class="badge bg-secondary" style="font-size: 0.75rem;"><i class="fas fa-times-circle me-1"></i>Disabled</span>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
             
-            <!-- Client MAC Address Section -->
-            <div class="d-flex justify-content-center align-items-center gap-3">
-                <div class="status-label" style="font-size: 0.85rem;">
-                    <i class="fas fa-network-wired me-1"></i>MAC Address
+            <!-- Client MAC and IP Address Section -->
+            <div class="text-center {% if validity_expires_on %}mb-0{% else %}mb-3{% endif %}">
+                <span class="mac-address-info" 
+                      style="font-size: 0.9rem; font-family: 'Courier New', monospace; cursor: pointer; color: #6c757d;" 
+                      onclick="copyMacAddress()" 
+                      title="Click to copy"
+                      id="macAddress">
+                    MAC:{{ mac|upper }}||IP:{{ ip|default:"Unknown" }}
+                </span>
+            </div>
+            
+            <!-- Validity Expiration Section -->
+            {% if validity_expires_on %}
+            <div class="text-center mb-3">
+                <span class="mac-address-info" 
+                      style="font-size: 0.9rem; font-family: 'Courier New', monospace; cursor: pointer; {% if validity_color == 'red' %}color: #dc3545;{% elif validity_color == 'orange' %}color: #fd7e14;{% else %}color: #6c757d;{% endif %}" 
+                      onclick="copyExpiryDate()" 
+                      title="Click to copy"
+                      id="expiryDate">
+                    EXPIRATION:{{ validity_expires_on|date:"n/j/y G:i a" }}
+                </span>
+            </div>
+            {% endif %}
+            
+            {% if time_left > 0 %}
+            <div class="mb-4">
+                <div class="status-label">
+                    <i class="fas fa-clock me-2"></i>REMAINING TIME
                 </div>
-                <div>
-                    <span class="badge bg-secondary mac-address-info" 
-                          style="font-size: 0.75rem; font-family: 'Courier New', monospace; cursor: pointer;" 
-                          onclick="copyMacAddress()" 
-                          title="Click to copy MAC address"
-                          id="macAddress">
-                        {{ mac|upper }}
-                    </span>
+                <div style="font-size: 1.8rem; font-weight: bold; color: #007bff;">
+                    <span id="timeLeft" data-seconds="{{ time_left }}">{{ time_left }}</span>
                 </div>
             </div>
+            {% endif %}
             
             <!-- Credit Status Section -->
             <div class="mb-4" id="creditSection" style="display: none;">
@@ -207,15 +244,6 @@
                     <span class="badge bg-success" style="font-size: 0.75rem;">Whitelisted</span>
                 </div>
             </div>
-            {% elif pause_resume_flg == 1 %}
-            <div class="d-flex justify-content-center align-items-center gap-3 mb-3">
-                <div class="status-label" style="font-size: 0.85rem;">
-                    <i class="fas fa-pause me-1"></i>AutoPause
-                </div>
-                <div>
-                    <span class="badge bg-info" style="font-size: 0.75rem;">Enabled</span>
-                </div>
-            </div>
             {% endif %}
         </div>
 
@@ -229,7 +257,7 @@
                         <small>Services are temporarily unavailable</small>
                     </div>
                     <button class="btn btn-secondary btn-portal" disabled>
-                        <i class="fas fa-coins me-2"></i>Insert Coin (Offline)
+                        <i class="fas fa-coins me-2"></i>INSERT COIN (Offline)
                     </button>
                     <button class="btn btn-secondary btn-portal" disabled>
                         <i class="fas fa-ticket-alt me-2"></i>Use Voucher (Offline)
@@ -240,18 +268,18 @@
                         <i class="fas fa-play me-2"></i>Resume Session
                     </button>
                     <button class="btn btn-primary btn-portal" onclick="insertCoin()">
-                        <i class="fas fa-coins me-2"></i>Insert Coin
+                        <i class="fas fa-coins me-2"></i>INSERT COIN
                     </button>
                     {% elif status == 'Connected' %}
                     <button class="btn btn-warning btn-portal" onclick="pauseSession()">
                         <i class="fas fa-pause me-2"></i>Pause Session
                     </button>
                     <button class="btn btn-primary btn-portal" onclick="insertCoin()">
-                        <i class="fas fa-coins me-2"></i>Insert Coin
+                        <i class="fas fa-coins me-2"></i>EXTEND
                     </button>
                     {% else %}
                     <button class="btn btn-primary btn-portal" onclick="insertCoin()">
-                        <i class="fas fa-coins me-2"></i>Insert Coin
+                        <i class="fas fa-coins me-2"></i>INSERT COIN
                     </button>
                     <button class="btn btn-success btn-portal" onclick="useVoucher()">
                         <i class="fas fa-ticket-alt me-2"></i>Use Voucher
@@ -270,7 +298,7 @@
         <div class="text-center mt-3">
             <small class="text-muted">
                 <i class="fas fa-shield-alt me-1"></i>
-                Secure Connection - IP: {{ ip|default:"Unknown" }}
+                Secure Connection Protected
             </small>
         </div>
     </div>
@@ -283,7 +311,7 @@
             <div class="modal-content">
                 <div class="modal-header bg-primary text-white">
                     <h5 class="modal-title" id="insertCoinModalLabel">
-                        <i class="fas fa-coins me-2"></i>Insert Coin
+                        <i class="fas fa-coins me-2"></i>INSERT COIN
                     </h5>
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
@@ -342,6 +370,50 @@
                     </button>
                     <button type="button" class="btn btn-primary" onclick="refreshCoinStatus()">
                         <i class="fas fa-sync-alt me-2"></i>Check Status
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Voucher Redemption Modal -->
+    <div class="modal fade" id="voucherModal" tabindex="-1" aria-labelledby="voucherModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header bg-success text-white">
+                    <h5 class="modal-title" id="voucherModalLabel">
+                        <i class="fas fa-ticket-alt me-2"></i>Use Voucher
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="text-center mb-4">
+                        <i class="fas fa-ticket-alt" style="font-size: 3rem; color: #28a745;"></i>
+                        <h4 class="mt-3 mb-3">Enter Your Voucher Code</h4>
+                        <p class="text-muted">Enter the voucher code to add time to your account</p>
+                    </div>
+                    
+                    <form id="voucherForm">
+                        <div class="mb-3">
+                            <label for="voucherCode" class="form-label">Voucher Code</label>
+                            <input type="text" class="form-control form-control-lg text-center" id="voucherCode" 
+                                   placeholder="Enter voucher code" maxlength="20" style="letter-spacing: 2px; font-family: monospace; text-transform: uppercase;"
+                                   oninput="this.value = this.value.toUpperCase().replace(/[^A-Z0-9]/g, '')">
+                            <div class="form-text">Enter the code exactly as shown on your voucher</div>
+                        </div>
+                        
+                        <div id="voucherStatus" class="mb-3"></div>
+                        
+                        <div class="d-grid">
+                            <button type="submit" class="btn btn-success btn-lg" id="redeemBtn">
+                                <i class="fas fa-check me-2"></i>Redeem Voucher
+                            </button>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">
+                        <i class="fas fa-times me-2"></i>Cancel
                     </button>
                 </div>
             </div>
@@ -454,16 +526,70 @@
             transition: all 0.3s ease;
             user-select: all;
             letter-spacing: 1px;
+            padding: 4px 8px;
+            border-radius: 4px;
         }
         
         .mac-address-info:hover {
-            background-color: #495057 !important;
-            transform: scale(1.05);
-            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+            background-color: #f8f9fa;
+            color: #495057 !important;
+            transform: scale(1.02);
+            box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
         }
     </style>
 
     <script>
+        // Banner Carousel Functionality
+        let currentSlide = 0;
+        const slides = document.querySelectorAll('.carousel-slide');
+        const indicators = document.querySelectorAll('.indicator');
+        const totalSlides = slides.length;
+
+        function showSlide(index) {
+            // Only proceed if we have slides
+            if (totalSlides === 0) return;
+            
+            // Hide all slides
+            slides.forEach(slide => {
+                slide.style.opacity = '0';
+                slide.classList.remove('active');
+            });
+            
+            // Hide all indicators (only if they exist)
+            indicators.forEach(indicator => {
+                indicator.style.background = 'rgba(255,255,255,0.4)';
+                indicator.classList.remove('active');
+            });
+            
+            // Show current slide
+            slides[index].style.opacity = '1';
+            slides[index].classList.add('active');
+            
+            // Update indicator if it exists
+            if (indicators[index]) {
+                indicators[index].style.background = 'rgba(255,255,255,0.8)';
+                indicators[index].classList.add('active');
+            }
+        }
+
+        function nextSlide() {
+            currentSlide = (currentSlide + 1) % totalSlides;
+            showSlide(currentSlide);
+        }
+
+        // Only start auto-advance if there are multiple slides
+        if (totalSlides > 1) {
+            setInterval(nextSlide, 5000);
+        }
+
+        // Add click handlers to indicators (only if they exist)
+        indicators.forEach((indicator, index) => {
+            indicator.addEventListener('click', () => {
+                currentSlide = index;
+                showSlide(currentSlide);
+            });
+        });
+
         let countdownTimer = null;
         let timeLeft = {{ slot_timeout|default:60 }}; // Portal-controlled countdown
         let coinCheckInterval = null;
@@ -773,13 +899,109 @@
         }
         
         function useVoucher() {
-            window.location.href = '/app/redeem';
+            // Show voucher modal using Bootstrap 5 API
+            const modal = new bootstrap.Modal(document.getElementById('voucherModal'));
+            modal.show();
         }
         
         function showRates() {
             // Show rates modal using Bootstrap 5 API
             const modal = new bootstrap.Modal(document.getElementById('ratesModal'));
             modal.show();
+        }
+        
+        // Voucher redemption functionality
+        document.getElementById('voucherForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const voucherCode = document.getElementById('voucherCode').value.trim().toUpperCase();
+            const redeemBtn = document.getElementById('redeemBtn');
+            const voucherStatus = document.getElementById('voucherStatus');
+            
+            if (!voucherCode) {
+                voucherStatus.innerHTML = `
+                    <div class="alert alert-warning">
+                        <i class="fas fa-exclamation-triangle me-2"></i>
+                        Please enter a voucher code
+                    </div>
+                `;
+                return;
+            }
+            
+            // Disable button and show loading
+            redeemBtn.disabled = true;
+            redeemBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Redeeming...';
+            
+            // Create FormData for the request
+            const formData = new FormData();
+            formData.append('voucher', voucherCode);
+            formData.append('mac', '{{ mac }}');
+            
+            // Make AJAX request to redeem voucher
+            fetch('/app/redeem', {
+                method: 'POST',
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'X-CSRFToken': getCookie('csrftoken')
+                },
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.code === 200) {
+                    // Success
+                    voucherStatus.innerHTML = `
+                        <div class="alert alert-success">
+                            <i class="fas fa-check-circle me-2"></i>
+                            ${data.description || 'Voucher redeemed successfully!'}
+                        </div>
+                    `;
+                    
+                    // Close modal and refresh page after 2 seconds
+                    setTimeout(function() {
+                        bootstrap.Modal.getInstance(document.getElementById('voucherModal')).hide();
+                        location.reload();
+                    }, 2000);
+                } else {
+                    // Error
+                    voucherStatus.innerHTML = `
+                        <div class="alert alert-danger">
+                            <i class="fas fa-exclamation-triangle me-2"></i>
+                            ${data.description || 'Invalid or expired voucher code'}
+                        </div>
+                    `;
+                }
+            })
+            .catch(error => {
+                console.error('Voucher redemption error:', error);
+                voucherStatus.innerHTML = `
+                    <div class="alert alert-danger">
+                        <i class="fas fa-exclamation-triangle me-2"></i>
+                        Network error. Please try again.
+                    </div>
+                `;
+            })
+            .finally(() => {
+                // Re-enable button
+                redeemBtn.disabled = false;
+                redeemBtn.innerHTML = '<i class="fas fa-check me-2"></i>Redeem Voucher';
+            });
+        });
+        
+        // Function to get CSRF token from cookies
+        function getCookie(name) {
+            let cookieValue = null;
+            if (document.cookie && document.cookie !== '') {
+                const cookies = document.cookie.split(';');
+                for (let i = 0; i < cookies.length; i++) {
+                    const cookie = cookies[i].trim();
+                    if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                        cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                        break;
+                    }
+                }
+            }
+            return cookieValue;
         }
         
         function pauseSession() {
@@ -845,10 +1067,17 @@
         function loadExistingCredits() {
             const mac = '{{ mac }}';
             
+            // Check if creditSection exists (not available in blocked state)
+            const creditSection = document.getElementById('creditSection');
+            if (!creditSection) {
+                console.log('Credit section not available (blocked state or other)');
+                return;
+            }
+            
             // Skip if MAC is null or default
             if (!mac || mac === '00:00:00:00:00:00') {
                 console.log('Invalid MAC address, skipping credit check');
-                document.getElementById('creditSection').style.display = 'none';
+                creditSection.style.display = 'none';
                 return;
             }
             
@@ -873,23 +1102,28 @@
                 
                 if (data.Total_Coins && data.Total_Coins > 0) {
                     // Show credit section
-                    document.getElementById('creditSection').style.display = 'block';
+                    creditSection.style.display = 'block';
                     
                     // Update credit display
-                    document.getElementById('creditAmount').textContent = '₱' + data.Total_Coins.toFixed(2);
-                    const minutes = Math.floor(data.Total_Time / 60);
-                    document.getElementById('creditTime').textContent = minutes + ' min';
+                    const creditAmount = document.getElementById('creditAmount');
+                    const creditTime = document.getElementById('creditTime');
                     
-                    console.log('Credits loaded: ₱' + data.Total_Coins + ', ' + minutes + ' minutes');
+                    if (creditAmount) creditAmount.textContent = '₱' + data.Total_Coins.toFixed(2);
+                    if (creditTime) {
+                        const minutes = Math.floor(data.Total_Time / 60);
+                        creditTime.textContent = minutes + ' min';
+                    }
+                    
+                    console.log('Credits loaded: ₱' + data.Total_Coins + ', ' + Math.floor(data.Total_Time / 60) + ' minutes');
                 } else {
                     // Hide credit section if no credits  
-                    document.getElementById('creditSection').style.display = 'none';
+                    creditSection.style.display = 'none';
                     console.log('No credits found for this client');
                 }
             })
             .catch(error => {
                 console.log('Error loading credits:', error);
-                document.getElementById('creditSection').style.display = 'none';
+                creditSection.style.display = 'none';
             });
         }
 
@@ -945,13 +1179,13 @@
         function showCopyFeedback(message, type = 'success') {
             const macInfo = document.querySelector('.mac-address-info');
             
-            // Change badge color temporarily
+            // Change background color temporarily
             if (type === 'success') {
-                macInfo.classList.remove('bg-secondary');
-                macInfo.classList.add('bg-success');
+                macInfo.style.backgroundColor = '#d4edda';
+                macInfo.style.color = '#155724';
             } else {
-                macInfo.classList.remove('bg-secondary');
-                macInfo.classList.add('bg-danger');
+                macInfo.style.backgroundColor = '#f8d7da';
+                macInfo.style.color = '#721c24';
             }
             
             // Show message in console and as a brief visual feedback
@@ -959,8 +1193,78 @@
             
             // Reset after 1.5 seconds
             setTimeout(function() {
-                macInfo.classList.remove('bg-success', 'bg-danger');
-                macInfo.classList.add('bg-secondary');
+                macInfo.style.backgroundColor = '';
+                macInfo.style.color = '#6c757d';
+            }, 1500);
+        }
+
+        // Copy expiry date function
+        function copyExpiryDate() {
+            const expiryElement = document.getElementById('expiryDate');
+            const expiryText = expiryElement.textContent || expiryElement.innerText;
+            
+            // Try modern clipboard API first
+            if (navigator.clipboard && window.isSecureContext) {
+                navigator.clipboard.writeText(expiryText).then(function() {
+                    showExpiryFeedback('Expiry date copied to clipboard!');
+                }).catch(function(err) {
+                    console.log('Clipboard copy failed:', err);
+                    fallbackCopyExpiryToClipboard(expiryText);
+                });
+            } else {
+                fallbackCopyExpiryToClipboard(expiryText);
+            }
+        }
+
+        // Fallback copy method for expiry date
+        function fallbackCopyExpiryToClipboard(text) {
+            const textArea = document.createElement('textarea');
+            textArea.value = text;
+            textArea.style.position = 'fixed';
+            textArea.style.left = '-999999px';
+            textArea.style.top = '-999999px';
+            document.body.appendChild(textArea);
+            textArea.focus();
+            textArea.select();
+            
+            try {
+                const successful = document.execCommand('copy');
+                if (successful) {
+                    showExpiryFeedback('Expiry date copied to clipboard!');
+                } else {
+                    showExpiryFeedback('Copy failed. Please select and copy manually.', 'error');
+                }
+            } catch (err) {
+                console.log('Fallback copy failed:', err);
+                showExpiryFeedback('Copy not supported. Please select and copy manually.', 'error');
+            }
+            
+            document.body.removeChild(textArea);
+        }
+
+        // Show copy feedback for expiry
+        function showExpiryFeedback(message, type = 'success') {
+            const expiryInfo = document.getElementById('expiryDate');
+            
+            // Store original color
+            const originalColor = expiryInfo.style.color;
+            
+            // Change background color temporarily
+            if (type === 'success') {
+                expiryInfo.style.backgroundColor = '#d4edda';
+                expiryInfo.style.color = '#155724';
+            } else {
+                expiryInfo.style.backgroundColor = '#f8d7da';
+                expiryInfo.style.color = '#721c24';
+            }
+            
+            // Show message in console
+            console.log(message);
+            
+            // Reset after 1.5 seconds
+            setTimeout(function() {
+                expiryInfo.style.backgroundColor = '';
+                expiryInfo.style.color = originalColor;
             }, 1500);
         }
 
@@ -1155,16 +1459,22 @@
         activityCheckInterval = setInterval(checkInactivity, 60000); // Check every minute
         {% endif %}
         
-        // Format and update time display as xxd xxhr xxm xxs
+        // Format and update time display as xxD. xxHR. xxMIN. xxSEC.
         function formatTime(seconds) {
-            if (seconds <= 0) return "0d 0hr 0m 0s";
+            if (seconds <= 0) return `0<span style="font-size: 0.6em; font-weight: normal;">HR.</span> 0<span style="font-size: 0.6em; font-weight: normal;">MIN.</span> 0<span style="font-size: 0.6em; font-weight: normal;">SEC.</span>`;
             
             const days = Math.floor(seconds / 86400);
             const hours = Math.floor((seconds % 86400) / 3600);
             const minutes = Math.floor((seconds % 3600) / 60);
             const secs = seconds % 60;
             
-            return `${days}d ${hours}hr ${minutes}m ${secs}s`;
+            let timeString = "";
+            if (days > 0) {
+                timeString += `${days}<span style="font-size: 0.6em; font-weight: normal;">D.</span> `;
+            }
+            timeString += `${hours}<span style="font-size: 0.6em; font-weight: normal;">HR.</span> ${minutes}<span style="font-size: 0.6em; font-weight: normal;">MIN.</span> ${secs}<span style="font-size: 0.6em; font-weight: normal;">SEC.</span>`;
+            
+            return timeString;
         }
         
         // Update time display on page load
@@ -1172,7 +1482,7 @@
             const timeLeftElement = document.getElementById('timeLeft');
             if (timeLeftElement) {
                 const seconds = parseInt(timeLeftElement.dataset.seconds);
-                timeLeftElement.textContent = formatTime(seconds);
+                timeLeftElement.innerHTML = formatTime(seconds);
                 
                 // If connected, update time every second
                 {% if status == 'Connected' %}
@@ -1180,10 +1490,10 @@
                 const updateInterval = setInterval(function() {
                     remainingSeconds--;
                     if (remainingSeconds >= 0) {
-                        timeLeftElement.textContent = formatTime(remainingSeconds);
+                        timeLeftElement.innerHTML = formatTime(remainingSeconds);
                     } else {
                         clearInterval(updateInterval);
-                        timeLeftElement.innerHTML = '<span style="color: #6c757d;">0d 0hr 0m 0s</span>';
+                        timeLeftElement.innerHTML = '<span style="color: #6c757d;">0<span style="font-size: 0.6em; font-weight: normal;">HR.</span> 0<span style="font-size: 0.6em; font-weight: normal;">MIN.</span> 0<span style="font-size: 0.6em; font-weight: normal;">SEC.</span></span>';
                         // Auto refresh to get updated status
                         setTimeout(() => location.reload(), 2000);
                     }

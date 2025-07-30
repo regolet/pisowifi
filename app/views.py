@@ -19,8 +19,37 @@ import subprocess
 import time, math, json
 import socket
 import struct
+import os
+from django.conf import settings
 
 local_ip = ['::1', '127.0.0.1', '10.0.0.1']
+
+def get_available_banner_images():
+    """
+    Get list of available banner images from the background folder
+    Returns list of image filenames that exist
+    """
+    banner_images = []
+    background_path = os.path.join(settings.STATIC_ROOT or settings.BASE_DIR, 'app', 'static', 'background', '1')
+    
+    # If STATIC_ROOT doesn't exist, try the development path
+    if not os.path.exists(background_path):
+        background_path = os.path.join(settings.BASE_DIR, 'app', 'static', 'background', '1')
+    
+    # List of potential banner images to check
+    potential_images = ['ml.jpg', 'ml_EsmybeO.jpg', 'pubg.jpg', 'banner1.jpg', 'banner2.jpg', 'banner3.jpg']
+    
+    if os.path.exists(background_path):
+        for image in potential_images:
+            image_path = os.path.join(background_path, image)
+            if os.path.isfile(image_path):
+                banner_images.append(image)
+    
+    # If no images found, return a default list (fallback)
+    if not banner_images:
+        banner_images = ['ml.jpg']  # Default fallback
+    
+    return banner_images
 
 def check_internet_connectivity():
     """
@@ -1197,6 +1226,23 @@ class Portal(View):
                 time_left = client.Time_Left
 
             notif_id = client.Notification_ID
+            
+            # Add validity/expiration information
+            if client.Validity_Expires_On:
+                validity_expires_on = client.Validity_Expires_On
+                validity_expires_in = validity_expires_on - timezone.now()
+                
+                # Determine color based on time remaining
+                if validity_expires_in.total_seconds() < 86400:  # Less than 24 hours
+                    validity_color = 'red'
+                elif validity_expires_in.total_seconds() < 604800:  # Less than 7 days
+                    validity_color = 'orange'
+                else:
+                    validity_color = 'green'
+                
+                info['validity_expires_on'] = validity_expires_on
+                info['validity_expires_in'] = validity_expires_in
+                info['validity_color'] = validity_color
 
         info['ip'] = ip
         info['mac'] = mac
@@ -1267,6 +1313,7 @@ class Portal(View):
         info['redir_url'] = settings.Redir_Url
         info['inactive_timeout'] = settings.Inactive_Timeout
         info['internet_connected'] = check_internet_connectivity()
+        info['banner_images'] = get_available_banner_images()
 
         return info
 
@@ -1729,9 +1776,37 @@ class Browse(View):
             try:
                 coin_queue = models.CoinQueue.objects.get(Client=mac)
                 addtl_time = coin_queue.Total_Time
-                coin_queue.delete()
-
+                
+                # Check if we need to set validity based on rates
                 client = models.Clients.objects.get(MAC_Address=mac)
+                
+                # Find the rate that was used for this purchase to get validity settings
+                # We'll use the first rate that matches the purchased time
+                matching_rate = None
+                for rate in models.Rates.objects.all():
+                    if rate.Rate_Value == addtl_time:
+                        matching_rate = rate
+                        break
+                
+                # Set validity if the rate has validity settings
+                if matching_rate and (matching_rate.Validity_Days > 0 or matching_rate.Validity_Hours > 0):
+                    validity_duration = matching_rate.get_validity_duration()
+                    
+                    # Set or update validity expiration
+                    if not client.Validity_Expires_On:
+                        # First time purchase - set validity from now
+                        client.Validity_Expires_On = timezone.now() + validity_duration
+                    else:
+                        # Existing validity - check if expired
+                        if timezone.now() > client.Validity_Expires_On:
+                            # Previous validity expired, start new validity period
+                            client.Validity_Expires_On = timezone.now() + validity_duration
+                            # Clear any expired time
+                            client.Time_Left = timedelta(0)
+                    
+                    client.save()
+                
+                coin_queue.delete()
                 client.Connect(addtl_time)
 
                 # Register this connection session
@@ -1835,32 +1910,134 @@ class Redeem(View):
 
     def post(self, request):
         if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
-            data = dict()
             voucher_code = request.POST.get('voucher', None)
             mac = request.POST.get('mac', None)
+            
+            # Validate input parameters
+            if not voucher_code or not mac:
+                resp = api_response(400)
+                resp['description'] = 'Voucher code and MAC address are required'
+                return JsonResponse(resp)
+            
+            # Clean and validate voucher code
+            voucher_code = voucher_code.strip().upper()
+            if len(voucher_code) < 6:
+                resp = api_response(110)
+                resp['description'] = 'Invalid voucher code format (minimum 6 characters)'
+                return JsonResponse(resp)
+            
             try:
-                voucher = models.Vouchers.objects.get(Voucher_code=voucher_code, Voucher_status = 'Not Used')
+                # Check if voucher exists and is not used
+                voucher = models.Vouchers.objects.get(Voucher_code=voucher_code, Voucher_status='Not Used')
+                
+                # Check if voucher has expired (30 days from creation)
+                from datetime import timedelta
+                expiry_date = voucher.Voucher_create_date_time + timedelta(days=30)
+                if timezone.now() > expiry_date:
+                    # Mark as expired
+                    voucher.Voucher_status = 'Expired'
+                    voucher.save()
+                    resp = api_response(110)
+                    resp['description'] = 'Voucher has expired'
+                    return JsonResponse(resp)
+                
                 time_value = voucher.Voucher_time_value
-
+                
+                # Assign voucher to client if not already assigned
                 if voucher.Voucher_client != mac:
                     voucher.Voucher_client = mac
-
-                try:
-                    client = models.Clients.objects.get(MAC_Address=mac)
-                    client.Connect(time_value)
-
-                    voucher.Voucher_status = 'Used'
                     voucher.save()
 
-                except ObjectDoesNotExist:
+                try:
+                    # Get or create client
+                    client, created = models.Clients.objects.get_or_create(
+                        MAC_Address=mac,
+                        defaults={
+                            'Connection_Status': 'Disconnected',
+                            'Time_Left': timedelta(0),
+                            'Expire_Date': timezone.now()
+                        }
+                    )
+                    
+                    print(f"[VOUCHER DEBUG] Client before connect: MAC={client.MAC_Address}, Time_Left={client.Time_Left}, Status={client.Connection_Status}")
+                    print(f"[VOUCHER DEBUG] Adding time: {time_value} ({time_value.total_seconds()} seconds)")
+                    
+                    # Check if voucher has validity period and set Validity_Expires_On
+                    validity_duration = voucher.get_validity_duration()
+                    if validity_duration.total_seconds() > 0:
+                        # Set validity expiration if voucher has validity period
+                        if not client.Validity_Expires_On:
+                            # First time purchase - set validity from now
+                            client.Validity_Expires_On = timezone.now() + validity_duration
+                        else:
+                            # Existing validity - check if expired
+                            if timezone.now() > client.Validity_Expires_On:
+                                # Previous validity expired, start new validity period
+                                client.Validity_Expires_On = timezone.now() + validity_duration
+                                # Clear any expired time
+                                client.Time_Left = timedelta(0)
+                            # If not expired, extend validity period
+                            else:
+                                client.Validity_Expires_On = max(
+                                    client.Validity_Expires_On,
+                                    timezone.now() + validity_duration
+                                )
+                        client.save()
+                    
+                    # Connect the client with voucher time
+                    connect_success = client.Connect(time_value)
+                    
+                    print(f"[VOUCHER DEBUG] Connect result: {connect_success}")
+                    print(f"[VOUCHER DEBUG] Client after connect: Time_Left={client.Time_Left}, Expire_On={client.Expire_On}")
+                    print(f"[VOUCHER DEBUG] Validity expires on: {client.Validity_Expires_On}")
+                    
+                    if connect_success:
+                        # Mark voucher as used
+                        voucher.Voucher_status = 'Used'
+                        voucher.Voucher_used_date_time = timezone.now()
+                        voucher.save()
+                        
+                        print(f"[VOUCHER DEBUG] Voucher marked as used: {voucher.Voucher_code}")
+                        
+                        # Success response with validity info
+                        resp = api_response(200)
+                        resp['voucher_code'] = voucher.Voucher_code
+                        resp['voucher_time'] = int(time_value.total_seconds())
+                        
+                        # Include validity info in description
+                        time_desc = f'{int(time_value.total_seconds() / 3600)}h {int((time_value.total_seconds() % 3600) / 60)}m added'
+                        validity_desc = ""
+                        if validity_duration.total_seconds() > 0:
+                            validity_desc = f" (Valid for {voucher.get_validity_display()})"
+                        
+                        resp['description'] = f'Voucher redeemed successfully. {time_desc}{validity_desc}.'
+                    else:
+                        print(f"[VOUCHER DEBUG] Connect failed for client {mac}")
+                        resp = api_response(800)
+                        resp['description'] = 'Failed to add time to client account'
+                        return JsonResponse(resp)
+                    
+                except Exception as e:
+                    # Log the error and return client error
+                    print(f"Error connecting client {mac}: {e}")
+                    import traceback
+                    traceback.print_exc()
                     resp = api_response(800)
+                    resp['description'] = 'Failed to connect client'
+                    return JsonResponse(resp)
 
-                resp = api_response(200)
-                resp['voucher_code'] = voucher.Voucher_code
-                resp['voucher_time'] = time_value
-
-            except ObjectDoesNotExist:
+            except models.Vouchers.DoesNotExist:
+                # Voucher not found or already used
                 resp = api_response(110)
+                resp['description'] = 'Invalid, used, or expired voucher code'
+                return JsonResponse(resp)
+            
+            except Exception as e:
+                # General error handling
+                print(f"Voucher redemption error: {e}")
+                resp = api_response(500)
+                resp['description'] = 'Internal server error during voucher redemption'
+                return JsonResponse(resp)
 
             return JsonResponse(resp)
 

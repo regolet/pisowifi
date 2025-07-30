@@ -1,0 +1,102 @@
+/* Live Refresh Controls Styling */
+.refresh-controls {
+    float: right;
+    margin: 5px 10px;
+    padding: 8px 12px;
+    background: #f8f9fa;
+    border: 1px solid #dee2e6;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    font-size: 12px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+.refresh-status-container {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+#refresh-icon {
+    color: #007cba;
+    transition: all 0.3s ease;
+}
+
+#refresh-icon.spinning {
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+#refresh-status {
+    font-weight: 500;
+    transition: color 0.3s ease;
+}
+
+#refresh-status.status-on {
+    color: #28a745;
+}
+
+#refresh-status.status-off {
+    color: #dc3545;
+}
+
+.refresh-btn {
+    background: #007cba;
+    color: white;
+    border: 1px solid #005a87;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    white-space: nowrap;
+}
+
+.refresh-btn:hover {
+    background: #005a87;
+    transform: translateY(-1px);
+}
+
+.refresh-btn:active {
+    transform: translateY(0);
+}
+
+.refresh-btn i {
+    margin-right: 4px;
+}
+
+.last-update {
+    color: #666;
+    font-size: 11px;
+    font-style: italic;
+}
+
+#last-update {
+    font-weight: 500;
+    color: #333;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .refresh-controls {
+        flex-direction: column;
+        gap: 8px;
+        padding: 6px 8px;
+        font-size: 11px;
+    }
+    
+    .refresh-status-container {
+        gap: 5px;
+    }
+    
+    .refresh-btn {
+        padding: 3px 6px;
+        font-size: 10px;
+    }
+}

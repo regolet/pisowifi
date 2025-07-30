@@ -1,0 +1,8 @@
+{% extends "admin/change_list.html" %}
+
+{% block extrahead %}
+{{ block.super }}
+{% if live_refresh_script %}
+{{ live_refresh_script|safe }}
+{% endif %}
+{% endblock %}
