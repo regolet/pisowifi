@@ -3288,6 +3288,10 @@ class VLANSettingsAdmin(Singleton):
     def has_delete_permission(self, request, obj=None):
         return False  # Singleton - no delete permission
     
+    def get_object(self, request, object_id, from_field=None):
+        """Return singleton instance or create it if it doesn't exist"""
+        return models.VLANSettings.load()
+    
     def response_change(self, request, obj):
         """Override to remove save and add another, save and continue editing buttons"""
         # Always redirect back to the same change page after save
@@ -3587,6 +3591,21 @@ class ZeroTierSettingsAdmin(Singleton):
                 })
         
         return JsonResponse({'status': 'error', 'message': 'Invalid request method'})
+    
+    def get_object(self, request, object_id, from_field=None):
+        """Return singleton instance or create it if it doesn't exist"""
+        return models.ZeroTierSettings.load()
+    
+    def has_add_permission(self, request):
+        return False  # Singleton - no add permission
+    
+    def has_delete_permission(self, request, obj=None):
+        return False  # Singleton - no delete permission
+    
+    def response_change(self, request, obj):
+        """Override to remove save and add another, save and continue editing buttons"""
+        # Always redirect back to the same change page after save
+        return HttpResponseRedirect(reverse('admin:app_zerotiersettings_change', args=[obj.pk]))
     
     def save_model(self, request, obj, form, change):
         from django.contrib import messages
