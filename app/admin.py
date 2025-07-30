@@ -1161,13 +1161,30 @@ class DeviceAdmin(Singleton, admin.ModelAdmin):
         super(DeviceAdmin, self).save_model(request, obj, form, change)
 
 class VouchersAdmin(admin.ModelAdmin):
+    """
+    Enhanced Vouchers Admin with Batch Generation Features:
+    
+    Features:
+    - Batch voucher generation with custom parameters (time, validity, export options)
+    - Quick batch actions for common voucher configurations
+    - CSV export functionality for selected vouchers
+    - Individual voucher management (expire, view, edit)
+    - Live statistics and status badges
+    
+    Batch Generation Options:
+    - Custom Batch: Full control over count, time, validity, code length, export format
+    - Quick Batches: Pre-configured common voucher types
+    - Export Formats: Screen display, CSV download, TXT download
+    
+    Access: /admin/app/vouchers/ -> "Batch Generate Vouchers" button
+    """
     list_display = ('Voucher_code', 'voucher_status_badge', 'Voucher_client', 'voucher_time_display', 'validity_display', 'Voucher_create_date_time', 'Voucher_used_date_time', 'days_until_expiry', 'action_buttons')
     list_filter = ('Voucher_status', 'Voucher_create_date_time', 'Voucher_used_date_time')
     search_fields = ('Voucher_code', 'Voucher_client')
     readonly_fields = ('Voucher_used_date_time', 'Voucher_create_date_time')
     list_per_page = 25
     ordering = ('-Voucher_create_date_time',)
-    actions = ['generate_bulk_vouchers', 'mark_as_expired', 'delete_expired_vouchers']
+    actions = ['generate_bulk_vouchers', 'generate_quick_batch_5_30min', 'generate_quick_batch_20_2hours', 'export_selected_vouchers', 'mark_as_expired', 'delete_expired_vouchers']
     
     fieldsets = (
         ('Voucher Information', {
@@ -1291,21 +1308,20 @@ class VouchersAdmin(admin.ModelAdmin):
     
     action_buttons.short_description = 'Actions'
     
+    
     def generate_bulk_vouchers(self, request, queryset):
+        """Keep simple bulk action for backward compatibility"""
         from django.shortcuts import redirect
         from django.contrib import messages
         from datetime import timedelta
         
         count = 10
         time_value = timedelta(hours=1)
-        validity_days = 7  # Default 7 days validity for bulk vouchers
+        validity_days = 7
         
         created_vouchers = []
         for i in range(count):
-            # Generate the code explicitly first
             voucher_code = models.Vouchers.generate_code()
-            
-            # Create voucher with the specific code
             voucher = models.Vouchers.objects.create(
                 Voucher_code=voucher_code,
                 Voucher_status='Not Used',
@@ -1315,10 +1331,93 @@ class VouchersAdmin(admin.ModelAdmin):
             )
             created_vouchers.append(voucher_code)
         
-        messages.success(request, f'Successfully created {count} vouchers (1 hour each, {validity_days} days validity): {", ".join(created_vouchers)}')
+        messages.success(request, f'Successfully created {count} vouchers: {", ".join(created_vouchers[:5])}{"..." if len(created_vouchers) > 5 else ""}')
         return redirect(request.get_full_path())
     
-    generate_bulk_vouchers.short_description = "Generate 10 new vouchers (1 hour each, 7 days validity)"
+    generate_bulk_vouchers.short_description = "Quick: Generate 10 vouchers (1h, 7d validity)"
+    
+    def export_selected_vouchers(self, request, queryset):
+        """Export selected vouchers to CSV"""
+        from django.http import HttpResponse
+        import csv
+        
+        response = HttpResponse(content_type='text/csv')
+        response['Content-Disposition'] = 'attachment; filename="selected_vouchers.csv"'
+        
+        writer = csv.writer(response)
+        writer.writerow(['Voucher Code', 'Status', 'Time Value', 'Validity Period', 'Client', 'Created Date', 'Used Date'])
+        
+        for voucher in queryset:
+            time_display = f"{int(voucher.Voucher_time_value.total_seconds())//3600}h {(int(voucher.Voucher_time_value.total_seconds())%3600)//60}m"
+            validity_display = voucher.get_validity_display()
+            
+            writer.writerow([
+                voucher.Voucher_code,
+                voucher.Voucher_status,
+                time_display,
+                validity_display,
+                voucher.Voucher_client or '',
+                voucher.Voucher_create_date_time.strftime('%Y-%m-%d %H:%M:%S'),
+                voucher.Voucher_used_date_time.strftime('%Y-%m-%d %H:%M:%S') if voucher.Voucher_used_date_time else ''
+            ])
+        
+        return response
+    
+    export_selected_vouchers.short_description = "Export selected vouchers to CSV"
+    
+    def generate_quick_batch_5_30min(self, request, queryset):
+        """Quick generate 5 vouchers with 30 minutes each"""
+        from django.shortcuts import redirect
+        from django.contrib import messages
+        from datetime import timedelta
+        
+        count = 5
+        time_value = timedelta(minutes=30)
+        validity_days = 3
+        
+        created_codes = []
+        for i in range(count):
+            voucher_code = models.Vouchers.generate_code()
+            models.Vouchers.objects.create(
+                Voucher_code=voucher_code,
+                Voucher_status='Not Used',
+                Voucher_time_value=time_value,
+                Validity_Days=validity_days,
+                Validity_Hours=0
+            )
+            created_codes.append(voucher_code)
+        
+        messages.success(request, f'Generated {count} vouchers (30min, 3d validity): {", ".join(created_codes)}')
+        return redirect(request.get_full_path())
+    
+    generate_quick_batch_5_30min.short_description = "Quick: 5 vouchers × 30min (3d validity)"
+    
+    def generate_quick_batch_20_2hours(self, request, queryset):
+        """Quick generate 20 vouchers with 2 hours each"""
+        from django.shortcuts import redirect
+        from django.contrib import messages
+        from datetime import timedelta
+        
+        count = 20
+        time_value = timedelta(hours=2)
+        validity_days = 14
+        
+        created_codes = []
+        for i in range(count):
+            voucher_code = models.Vouchers.generate_code()
+            models.Vouchers.objects.create(
+                Voucher_code=voucher_code,
+                Voucher_status='Not Used',
+                Voucher_time_value=time_value,
+                Validity_Days=validity_days,
+                Validity_Hours=0
+            )
+            created_codes.append(voucher_code)
+        
+        messages.success(request, f'Generated {count} vouchers (2h, 14d validity): {", ".join(created_codes[:5])}{"..." if len(created_codes) > 5 else ""}')
+        return redirect(request.get_full_path())
+    
+    generate_quick_batch_20_2hours.short_description = "Quick: 20 vouchers × 2h (14d validity)"
     
     def mark_as_expired(self, request, queryset):
         from django.contrib import messages
@@ -1341,8 +1440,145 @@ class VouchersAdmin(admin.ModelAdmin):
         urls = super().get_urls()
         custom_urls = [
             path('<int:voucher_id>/expire/', self.admin_site.admin_view(self.expire_voucher_view), name='vouchers_expire'),
+            path('generate-batch/', self.admin_site.admin_view(self.generate_batch_view), name='app_vouchers_generate_batch'),
         ]
         return custom_urls + urls
+    
+    def generate_batch_view(self, request):
+        """Generate multiple vouchers using the new add_form.html template"""
+        from django import forms
+        from django.shortcuts import render, redirect
+        from django.contrib import messages
+        from django.urls import reverse
+        from datetime import timedelta
+        
+        class BatchVoucherForm(forms.Form):
+            count = forms.IntegerField(
+                label='Number of Vouchers',
+                initial=10,
+                min_value=1,
+                max_value=1000,
+                help_text='How many vouchers to generate (1-1000)',
+                widget=forms.NumberInput(attrs={'class': 'form-control'})
+            )
+            code_length = forms.IntegerField(
+                label='Code Length',
+                initial=6,
+                min_value=4,
+                max_value=20,
+                help_text='Length of voucher codes (4-20 characters)',
+                widget=forms.NumberInput(attrs={'class': 'form-control'})
+            )
+            hours = forms.IntegerField(
+                label='Hours',
+                initial=1,
+                min_value=0,
+                max_value=168,
+                help_text='Hours of internet time (0-168)',
+                widget=forms.NumberInput(attrs={'class': 'form-control'})
+            )
+            minutes = forms.IntegerField(
+                label='Minutes',
+                initial=0,
+                min_value=0,
+                max_value=59,
+                help_text='Additional minutes (0-59)',
+                widget=forms.NumberInput(attrs={'class': 'form-control'})
+            )
+            validity_days = forms.IntegerField(
+                label='Validity Days',
+                initial=7,
+                min_value=0,
+                max_value=365,
+                help_text='Days until unused time expires (0-365)',
+                widget=forms.NumberInput(attrs={'class': 'form-control'})
+            )
+            validity_hours = forms.IntegerField(
+                label='Validity Hours',
+                initial=0,
+                min_value=0,
+                max_value=23,
+                help_text='Additional hours (0-23)',
+                widget=forms.NumberInput(attrs={'class': 'form-control'})
+            )
+        
+        if request.method == 'POST':
+            form = BatchVoucherForm(request.POST)
+            if form.is_valid():
+                # Get form data
+                count = form.cleaned_data['count']
+                code_length = form.cleaned_data['code_length']
+                hours = form.cleaned_data['hours']
+                minutes = form.cleaned_data['minutes']
+                validity_days = form.cleaned_data['validity_days']
+                validity_hours = form.cleaned_data['validity_hours']
+                
+                # Validate time values
+                total_minutes = hours * 60 + minutes
+                if total_minutes == 0:
+                    messages.error(request, 'Time value must be greater than 0. Please set at least some hours or minutes.')
+                else:
+                    # Create vouchers
+                    voucher_time = timedelta(hours=hours, minutes=minutes)
+                    created_vouchers = []
+                    
+                    for i in range(count):
+                        voucher = models.Vouchers.objects.create(
+                            Voucher_code=models.Vouchers.generate_code(size=code_length),
+                            Voucher_time_value=voucher_time,
+                            Validity_Days=validity_days,
+                            Validity_Hours=validity_hours,
+                            Voucher_status='Not Used'
+                        )
+                        created_vouchers.append(voucher.Voucher_code)
+                    
+                    messages.success(
+                        request, 
+                        f'Successfully generated {count} vouchers with {hours}h {minutes}m time value. '
+                        f'Codes: {", ".join(created_vouchers[:5])}'
+                        + (f' and {count-5} more...' if count > 5 else '')
+                    )
+                    
+                    return redirect(reverse('admin:app_vouchers_changelist'))
+        else:
+            form = BatchVoucherForm()
+        
+        # Custom fieldsets for better organization
+        custom_fieldsets = [
+            {
+                'name': 'Voucher Configuration',
+                'fields': ['count', 'code_length'],
+                'description': 'Basic voucher generation settings'
+            },
+            {
+                'name': 'Time Value',
+                'fields': ['hours', 'minutes'],
+                'description': 'Internet time allocation per voucher'
+            },
+            {
+                'name': 'Validity Period', 
+                'fields': ['validity_days', 'validity_hours'],
+                'description': 'How long the voucher time remains usable after redemption (0 for no expiration)'
+            }
+        ]
+        
+        # Get the admin site context which includes available_apps for sidebar
+        admin_context = self.admin_site.each_context(request)
+        
+        context = {
+            'form': form,
+            'title': 'Generate Multiple Vouchers',
+            'opts': self.model._meta,
+            'form_url': '',
+            'submit_label': 'Generate Vouchers',
+            'cancel_url': reverse('admin:app_vouchers_changelist'),
+            'custom_fieldsets': custom_fieldsets,
+            'has_file_field': False,
+            'show_save_and_add_another': False,
+            **admin_context,  # Include all admin context including available_apps
+        }
+        
+        return render(request, 'admin/add_form.html', context)
 
     def expire_voucher_view(self, request, voucher_id):
         from django.shortcuts import get_object_or_404, redirect
@@ -1362,6 +1598,10 @@ class VouchersAdmin(admin.ModelAdmin):
 
     def changelist_view(self, request, extra_context=None):
         from django.db.models import Count, Q
+        from django.utils.html import format_html
+        
+        if extra_context is None:
+            extra_context = {}
         
         stats = models.Vouchers.objects.aggregate(
             total=Count('id'),

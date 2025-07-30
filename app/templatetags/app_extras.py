@@ -33,3 +33,8 @@ def duration(td):
 	time += pluralize(seconds, 'sec')
 
 	return time
+
+@register.filter
+def lookup(dictionary, key):
+	"""Template filter to look up dictionary values by key"""
+	return dictionary.get(key)

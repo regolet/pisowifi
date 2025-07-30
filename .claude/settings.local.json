@@ -25,7 +25,8 @@
       "Bash(curl:*)",
       "Bash(git add:*)",
       "Bash(touch:*)",
-      "Bash(git commit:*)"
+      "Bash(git commit:*)",
+      "Bash(timeout:*)"
     ],
     "deny": []
   }

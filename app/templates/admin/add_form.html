@@ -1,0 +1,146 @@
+{% extends "admin/base_site.html" %}
+{% load i18n admin_urls static jazzmin app_extras %}
+{% get_jazzmin_settings request as jazzmin_settings %}
+
+{% block extrastyle %}
+    {{ block.super }}
+    <link rel="stylesheet" href="{% static 'admin/css/forms.css' %}">
+    <link rel="stylesheet" href="{% static 'admin/css/widgets.css' %}">
+{% endblock %}
+
+{% block extrahead %}
+    {{ block.super }}
+    <script type="text/javascript" src="{% static 'admin/js/vendor/jquery/jquery.js' %}"></script>
+    <script type="text/javascript" src="{% static 'admin/js/jquery.init.js' %}"></script>
+    <script type="text/javascript" src="{% url 'admin:jsi18n' %}"></script>
+    {{ media }}
+{% endblock %}
+
+{% block bodyclass %}{{ block.super }} app-{{ opts.app_label }} model-{{ opts.model_name }} add-form{% endblock %}
+
+{% block breadcrumbs %}
+    {% if not is_popup %}
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="{% url 'admin:index' %}">{% trans 'Home' %}</a></li>
+            <li class="breadcrumb-item"><a href="{% url 'admin:app_list' app_label=opts.app_label %}">{{ opts.app_config.verbose_name|capfirst }}</a></li>
+            <li class="breadcrumb-item"><a href="{% url 'admin:'|add:opts.app_label|add:'_'|add:opts.model_name|add:'_changelist' %}">{{ opts.verbose_name_plural|capfirst }}</a></li>
+            <li class="breadcrumb-item active">{{ title }}</li>
+        </ol>
+    {% endif %}
+{% endblock %}
+
+{% block content_title %}{{ title }}{% endblock %}
+
+{% block content %}
+<div id="content-main" class="col-12">
+    {% if errors %}
+        <div class="alert alert-danger alert-dismissible">
+            <button type="button" class="close" data-dismiss="alert" aria-label="Close">
+                <span aria-hidden="true">&times;</span>
+            </button>
+            <strong>{% trans "Please correct the errors below." %}</strong>
+            {{ errors }}
+        </div>
+    {% endif %}
+
+    <form method="post" action="{{ form_url }}" {% if has_file_field %}enctype="multipart/form-data"{% endif %} novalidate>
+        {% csrf_token %}
+        
+        <div class="row">
+            <!-- Main Form Content -->
+            <div class="col-12 col-lg-9">
+                <div class="card">
+                    <div class="card-body">
+                        {% if custom_fieldsets %}
+                            {% for fieldset in custom_fieldsets %}
+                                <fieldset class="module aligned">
+                                    {% if fieldset.name %}
+                                        <h2>{{ fieldset.name }}</h2>
+                                    {% endif %}
+                                    {% if fieldset.description %}
+                                        <div class="description">{{ fieldset.description }}</div>
+                                    {% endif %}
+                                    
+                                    {% for field_name in fieldset.fields %}
+                                        {% for field in form %}
+                                            {% if field.name == field_name %}
+                                                <div class="form-group row">
+                                                    <label{% if field.field.required %} class="required col-sm-3 text-left control-label"{% else %} class="col-sm-3 text-left control-label"{% endif %} for="{{ field.id_for_label }}">
+                                                        {{ field.label }}{% if field.field.required %}<span class="text-red">*</span>{% endif %}:
+                                                    </label>
+                                                    <div class="col-sm-7">
+                                                        {{ field }}
+                                                        {% if field.errors %}
+                                                            <div class="help-block text-danger">
+                                                                {% for error in field.errors %}
+                                                                    {{ error }}
+                                                                {% endfor %}
+                                                            </div>
+                                                        {% endif %}
+                                                        {% if field.help_text %}
+                                                            <div class="help-block">{{ field.help_text|safe }}</div>
+                                                        {% endif %}
+                                                    </div>
+                                                </div>
+                                            {% endif %}
+                                        {% endfor %}
+                                    {% endfor %}
+                                </fieldset>
+                            {% endfor %}
+                        {% else %}
+                            <!-- Default: Render all form fields -->
+                            <fieldset class="module aligned">
+                                {% for field in form %}
+                                    <div class="form-group row">
+                                        <label{% if field.field.required %} class="required col-sm-3 text-left control-label"{% else %} class="col-sm-3 text-left control-label"{% endif %} for="{{ field.id_for_label }}">
+                                            {{ field.label }}{% if field.field.required %}<span class="text-red">*</span>{% endif %}:
+                                        </label>
+                                        <div class="col-sm-7">
+                                            {{ field }}
+                                            {% if field.errors %}
+                                                <div class="help-block text-danger">
+                                                    {% for error in field.errors %}
+                                                        {{ error }}
+                                                    {% endfor %}
+                                                </div>
+                                            {% endif %}
+                                            {% if field.help_text %}
+                                                <div class="help-block">{{ field.help_text|safe }}</div>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                {% endfor %}
+                            </fieldset>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Actions Sidebar -->
+            <div class="col-12 col-lg-3">
+                <div id="jazzy-actions">
+                    <div class="form-group">
+                        <input type="submit" value="{{ submit_label|default:_('Save') }}" class="btn btn-success form-control" name="_save">
+                    </div>
+                    
+                    {% if show_save_and_add_another %}
+                        <div class="form-group">
+                            <input type="submit" value="{% trans 'Save and add another' %}" class="btn btn-outline-success form-control" name="_addanother">
+                        </div>
+                    {% endif %}
+                    
+                    {% if cancel_url %}
+                        <div class="form-group">
+                            <a href="{{ cancel_url }}" class="btn btn-outline-secondary form-control">{% trans 'Cancel' %}</a>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </form>
+</div>
+{% endblock %}
+
+{% block extrajs %}
+    {{ block.super }}
+{% endblock %}
