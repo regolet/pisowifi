@@ -1740,3 +1740,223 @@ class ZeroTierMonitoringData(models.Model):
     
     def __str__(self):
         return f'Monitoring Data: {self.timestamp.strftime("%Y-%m-%d %H:%M:%S")}'
+
+
+class PortPrioritization(models.Model):
+    PRIORITY_LEVELS = [
+        ('critical', 'Critical (1)'),
+        ('high', 'High (2)'),
+        ('normal', 'Normal (3)'),
+        ('low', 'Low (4)'),
+    ]
+    
+    TRAFFIC_TYPES = [
+        ('browsing', 'Web Browsing'),
+        ('gaming', 'Gaming'),
+        ('streaming', 'Video Streaming'),
+        ('voip', 'Voice/Video Calls'),
+        ('downloading', 'File Downloads'),
+        ('p2p', 'P2P/Torrenting'),
+        ('social', 'Social Media'),
+        ('email', 'Email'),
+        ('custom', 'Custom Application'),
+    ]
+    
+    # Basic Configuration
+    rule_name = models.CharField(max_length=100, verbose_name='Rule Name')
+    traffic_type = models.CharField(max_length=20, choices=TRAFFIC_TYPES, verbose_name='Traffic Type')
+    priority_level = models.CharField(max_length=10, choices=PRIORITY_LEVELS, default='normal', verbose_name='Priority Level')
+    
+    # Port Configuration
+    ports = models.CharField(max_length=500, verbose_name='Ports', help_text='Comma-separated ports/ranges (e.g., 80,443,8000-9000)')
+    protocol = models.CharField(max_length=10, choices=[('tcp', 'TCP'), ('udp', 'UDP'), ('both', 'Both')], default='both', verbose_name='Protocol')
+    
+    # Bandwidth Settings
+    guaranteed_bandwidth_up = models.IntegerField(null=True, blank=True, verbose_name='Guaranteed Upload (Kbps)', help_text='Minimum guaranteed upload bandwidth')
+    guaranteed_bandwidth_down = models.IntegerField(null=True, blank=True, verbose_name='Guaranteed Download (Kbps)', help_text='Minimum guaranteed download bandwidth')
+    max_bandwidth_up = models.IntegerField(null=True, blank=True, verbose_name='Max Upload (Kbps)', help_text='Maximum upload bandwidth limit')
+    max_bandwidth_down = models.IntegerField(null=True, blank=True, verbose_name='Max Download (Kbps)', help_text='Maximum download bandwidth limit')
+    
+    # Advanced Settings
+    dscp_marking = models.IntegerField(null=True, blank=True, verbose_name='DSCP Marking', help_text='DSCP value for packet marking (0-63)')
+    burst_allowance = models.IntegerField(default=10, verbose_name='Burst Allowance (%)', help_text='Percentage above guaranteed bandwidth allowed in bursts')
+    
+    # Rule Status
+    is_active = models.BooleanField(default=True, verbose_name='Active')
+    apply_to_all_clients = models.BooleanField(default=True, verbose_name='Apply to All Clients', help_text='Apply this rule to all clients by default')
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name='Created At')
+    updated_at = models.DateTimeField(auto_now=True, verbose_name='Updated At')
+    
+    class Meta:
+        verbose_name = 'Port Prioritization Rule'
+        verbose_name_plural = 'Port Prioritization Rules'
+        ordering = ['priority_level', 'rule_name']
+    
+    def __str__(self):
+        return f'{self.rule_name} ({self.get_priority_level_display()}) - {self.get_traffic_type_display()}'
+    
+    def get_ports_list(self):
+        """Convert ports string to list of individual ports"""
+        ports = []
+        for port_range in self.ports.split(','):
+            port_range = port_range.strip()
+            if '-' in port_range:
+                start, end = map(int, port_range.split('-'))
+                ports.extend(range(start, end + 1))
+            else:
+                ports.append(int(port_range))
+        return ports
+    
+    def apply_traffic_control(self):
+        """Apply traffic control rules using tc (traffic control)"""
+        try:
+            import subprocess
+            
+            # Get network interface
+            result = subprocess.run(['ip', 'route', 'show', 'default'], capture_output=True, text=True)
+            if result.returncode == 0:
+                # Extract interface from default route
+                interface = result.stdout.split()[4] if len(result.stdout.split()) > 4 else 'eth0'
+            else:
+                interface = 'eth0'  # fallback
+            
+            # Priority to TC class mapping
+            priority_class = {
+                'critical': '1:10',
+                'high': '1:20', 
+                'normal': '1:30',
+                'low': '1:40'
+            }
+            
+            class_id = priority_class.get(self.priority_level, '1:30')
+            
+            # Create tc rules for each port
+            for port in self.get_ports_list():
+                if self.protocol in ['tcp', 'both']:
+                    cmd = [
+                        'tc', 'filter', 'add', 'dev', interface, 'protocol', 'ip', 'parent', '1:', 'prio', '1',
+                        'u32', 'match', 'ip', 'dport', str(port), '0xffff', 'flowid', class_id
+                    ]
+                    subprocess.run(cmd, capture_output=True)
+                
+                if self.protocol in ['udp', 'both']:
+                    cmd = [
+                        'tc', 'filter', 'add', 'dev', interface, 'protocol', 'ip', 'parent', '1:', 'prio', '1',
+                        'u32', 'match', 'ip', 'protocol', '17', '0xff', 'match', 'ip', 'dport', str(port), '0xffff', 'flowid', class_id
+                    ]
+                    subprocess.run(cmd, capture_output=True)
+            
+            return True
+        except Exception as e:
+            print(f"Error applying traffic control: {e}")
+            return False
+    
+    def remove_traffic_control(self):
+        """Remove traffic control rules"""
+        try:
+            import subprocess
+            
+            # Get network interface
+            result = subprocess.run(['ip', 'route', 'show', 'default'], capture_output=True, text=True)
+            interface = result.stdout.split()[4] if result.returncode == 0 and len(result.stdout.split()) > 4 else 'eth0'
+            
+            # Remove filters for each port
+            for port in self.get_ports_list():
+                if self.protocol in ['tcp', 'both']:
+                    subprocess.run(['tc', 'filter', 'del', 'dev', interface, 'protocol', 'ip', 'parent', '1:', 'prio', '1'], capture_output=True)
+                if self.protocol in ['udp', 'both']:
+                    subprocess.run(['tc', 'filter', 'del', 'dev', interface, 'protocol', 'ip', 'parent', '1:', 'prio', '1'], capture_output=True)
+            
+            return True
+        except Exception:
+            return False
+    
+    @classmethod
+    def create_default_rules(cls):
+        """Create default port prioritization rules for common services"""
+        default_rules = [
+            {
+                'rule_name': 'Web Browsing (HTTP/HTTPS)',
+                'traffic_type': 'browsing',
+                'priority_level': 'high',
+                'ports': '80,443',
+                'protocol': 'tcp',
+                'guaranteed_bandwidth_down': 1000,  # 1 Mbps
+                'max_bandwidth_down': 10000,  # 10 Mbps
+                'dscp_marking': 0,
+            },
+            {
+                'rule_name': 'Gaming (Common Ports)',
+                'traffic_type': 'gaming',
+                'priority_level': 'critical',
+                'ports': '3074,27015,7777-7784,28910',
+                'protocol': 'both',
+                'guaranteed_bandwidth_up': 500,    # 500 Kbps
+                'guaranteed_bandwidth_down': 1000, # 1 Mbps
+                'max_bandwidth_up': 2000,          # 2 Mbps
+                'max_bandwidth_down': 5000,        # 5 Mbps
+                'dscp_marking': 46,  # EF (Expedited Forwarding)
+            },
+            {
+                'rule_name': 'Video Streaming',
+                'traffic_type': 'streaming',
+                'priority_level': 'high',
+                'ports': '1935,8080,8443',
+                'protocol': 'tcp',
+                'guaranteed_bandwidth_down': 2000,  # 2 Mbps
+                'max_bandwidth_down': 25000,        # 25 Mbps
+                'dscp_marking': 34,  # AF41
+            },
+            {
+                'rule_name': 'Voice/Video Calls',
+                'traffic_type': 'voip',
+                'priority_level': 'critical',
+                'ports': '5060,5061,10000-20000,3478-3481',
+                'protocol': 'both',
+                'guaranteed_bandwidth_up': 300,    # 300 Kbps
+                'guaranteed_bandwidth_down': 300,  # 300 Kbps
+                'max_bandwidth_up': 1000,          # 1 Mbps  
+                'max_bandwidth_down': 1000,        # 1 Mbps
+                'dscp_marking': 46,  # EF
+            },
+            {
+                'rule_name': 'File Downloads (HTTP/FTP)',
+                'traffic_type': 'downloading',
+                'priority_level': 'normal',
+                'ports': '20,21,80,443,8080',
+                'protocol': 'tcp',
+                'max_bandwidth_down': 50000,  # 50 Mbps
+                'dscp_marking': 0,
+            },
+            {
+                'rule_name': 'P2P/BitTorrent',
+                'traffic_type': 'p2p',
+                'priority_level': 'low',
+                'ports': '6881-6889,51413',
+                'protocol': 'both',
+                'max_bandwidth_up': 5000,    # 5 Mbps
+                'max_bandwidth_down': 10000, # 10 Mbps
+                'dscp_marking': 8,  # CS1
+            },
+            {
+                'rule_name': 'Email (SMTP/POP3/IMAP)',
+                'traffic_type': 'email',
+                'priority_level': 'normal',
+                'ports': '25,110,143,465,587,993,995',
+                'protocol': 'tcp',
+                'guaranteed_bandwidth_up': 100,   # 100 Kbps
+                'guaranteed_bandwidth_down': 500, # 500 Kbps
+                'dscp_marking': 0,
+            }
+        ]
+        
+        created_count = 0
+        for rule_data in default_rules:
+            rule, created = cls.objects.get_or_create(
+                rule_name=rule_data['rule_name'],
+                defaults=rule_data
+            )
+            if created:
+                created_count += 1
+        
+        return created_count

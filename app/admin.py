@@ -3710,3 +3710,218 @@ class ZeroTierMonitoringDataAdmin(admin.ModelAdmin):
 
 admin.site.register(models.ZeroTierSettings, ZeroTierSettingsAdmin)
 admin.site.register(models.ZeroTierMonitoringData, ZeroTierMonitoringDataAdmin)
+
+
+class PortPrioritizationAdmin(admin.ModelAdmin):
+    list_display = ('rule_name', 'traffic_type_display', 'priority_level_display', 'ports_summary', 'protocol', 'bandwidth_summary', 'is_active', 'created_at')
+    list_filter = ('priority_level', 'traffic_type', 'protocol', 'is_active', 'apply_to_all_clients')
+    search_fields = ('rule_name', 'ports')
+    readonly_fields = ('created_at', 'updated_at')
+    list_editable = ('is_active',)
+    ordering = ['priority_level', 'rule_name']
+    
+    fieldsets = (
+        ('Basic Configuration', {
+            'fields': ('rule_name', 'traffic_type', 'priority_level')
+        }),
+        ('Port Configuration', {
+            'fields': ('ports', 'protocol'),
+            'description': 'Specify ports and protocols for this rule. Use commas for multiple ports and dashes for ranges (e.g., 80,443,8000-9000)'
+        }),
+        ('Bandwidth Settings', {
+            'fields': ('guaranteed_bandwidth_up', 'guaranteed_bandwidth_down', 'max_bandwidth_up', 'max_bandwidth_down'),
+            'description': 'Configure bandwidth guarantees and limits for this traffic type'
+        }),
+        ('Advanced Settings', {
+            'fields': ('dscp_marking', 'burst_allowance'),
+            'classes': ('collapse',),
+            'description': 'Advanced QoS settings for network engineers'
+        }),
+        ('Rule Status', {
+            'fields': ('is_active', 'apply_to_all_clients', 'created_at', 'updated_at')
+        })
+    )
+    
+    def traffic_type_display(self, obj):
+        from django.utils.html import format_html
+        colors = {
+            'browsing': '#007bff',     # Blue
+            'gaming': '#dc3545',       # Red  
+            'streaming': '#fd7e14',    # Orange
+            'voip': '#28a745',         # Green
+            'downloading': '#6f42c1',  # Purple
+            'p2p': '#6c757d',          # Gray
+            'social': '#e83e8c',       # Pink
+            'email': '#20c997',        # Teal
+            'custom': '#ffc107'        # Yellow
+        }
+        color = colors.get(obj.traffic_type, '#6c757d')
+        return format_html(
+            '<span style="background-color: {}; color: white; padding: 2px 6px; border-radius: 3px; font-size: 11px;">{}</span>',
+            color, obj.get_traffic_type_display()
+        )
+    traffic_type_display.short_description = 'Traffic Type'
+    
+    def priority_level_display(self, obj):
+        from django.utils.html import format_html
+        colors = {
+            'critical': '#dc3545',  # Red
+            'high': '#fd7e14',      # Orange  
+            'normal': '#28a745',    # Green
+            'low': '#6c757d'        # Gray
+        }
+        icons = {
+            'critical': 'fas fa-exclamation-triangle',
+            'high': 'fas fa-arrow-up',
+            'normal': 'fas fa-minus', 
+            'low': 'fas fa-arrow-down'
+        }
+        color = colors.get(obj.priority_level, '#6c757d')
+        icon = icons.get(obj.priority_level, 'fas fa-minus')
+        
+        return format_html(
+            '<span style="background-color: {}; color: white; padding: 2px 6px; border-radius: 3px; font-size: 11px;"><i class="{}"></i> {}</span>',
+            color, icon, obj.get_priority_level_display()
+        )
+    priority_level_display.short_description = 'Priority'
+    
+    def ports_summary(self, obj):
+        ports = obj.ports
+        if len(ports) > 30:
+            return f"{ports[:30]}..."
+        return ports
+    ports_summary.short_description = 'Ports'
+    
+    def bandwidth_summary(self, obj):
+        from django.utils.html import format_html
+        summary = []
+        
+        if obj.guaranteed_bandwidth_down:
+            summary.append(f"↓{obj.guaranteed_bandwidth_down//1000}M")
+        if obj.guaranteed_bandwidth_up:
+            summary.append(f"↑{obj.guaranteed_bandwidth_up//1000}M")
+        if obj.max_bandwidth_down and not obj.guaranteed_bandwidth_down:
+            summary.append(f"Max↓{obj.max_bandwidth_down//1000}M")
+        if obj.max_bandwidth_up and not obj.guaranteed_bandwidth_up:
+            summary.append(f"Max↑{obj.max_bandwidth_up//1000}M")
+            
+        if not summary:
+            return format_html('<span style="color: #6c757d;">No limits</span>')
+        
+        return format_html(
+            '<span style="font-family: monospace; font-size: 11px;">{}</span>',
+            ' | '.join(summary)
+        )
+    bandwidth_summary.short_description = 'Bandwidth'
+    
+    def changelist_view(self, request, extra_context=None):
+        extra_context = extra_context or {}
+        extra_context.update({
+            'title': 'Port Prioritization Rules - Traffic QoS Management',
+            'subtitle': 'Configure bandwidth prioritization based on port and traffic type'
+        })
+        return super().changelist_view(request, extra_context=extra_context)
+    
+    actions = ['activate_rules', 'deactivate_rules', 'apply_traffic_control', 'create_default_rules']
+    
+    def activate_rules(self, request, queryset):
+        updated = queryset.update(is_active=True)
+        
+        # Apply traffic control for activated rules
+        for rule in queryset.filter(is_active=True):
+            rule.apply_traffic_control()
+        
+        self.message_user(request, f'{updated} rule(s) activated and traffic control applied.')
+    activate_rules.short_description = "Activate selected rules and apply traffic control"
+    
+    def deactivate_rules(self, request, queryset):
+        # Remove traffic control for deactivated rules
+        for rule in queryset.filter(is_active=True):
+            rule.remove_traffic_control()
+        
+        updated = queryset.update(is_active=False)
+        self.message_user(request, f'{updated} rule(s) deactivated and traffic control removed.')
+    deactivate_rules.short_description = "Deactivate selected rules and remove traffic control"
+    
+    def apply_traffic_control(self, request, queryset):
+        success_count = 0
+        for rule in queryset.filter(is_active=True):
+            if rule.apply_traffic_control():
+                success_count += 1
+        
+        self.message_user(request, f'Traffic control applied to {success_count} rule(s).')
+    apply_traffic_control.short_description = "Apply traffic control to selected rules"
+    
+    def create_default_rules(self, request, queryset):
+        created_count = models.PortPrioritization.create_default_rules()
+        if created_count > 0:
+            self.message_user(request, f'{created_count} default port prioritization rules created.')
+        else:
+            self.message_user(request, 'Default rules already exist.')
+    create_default_rules.short_description = "Create default port prioritization rules"
+    
+    def get_urls(self):
+        from django.urls import path
+        urls = super().get_urls()
+        custom_urls = [
+            path('create-defaults/', self.admin_site.admin_view(self.create_defaults_view), name='app_portprioritization_create_defaults'),
+        ]
+        return custom_urls + urls
+    
+    def create_defaults_view(self, request):
+        from django.http import JsonResponse
+        
+        if request.method == 'POST':
+            try:
+                created_count = models.PortPrioritization.create_default_rules()
+                if created_count > 0:
+                    return JsonResponse({
+                        'status': 'success',
+                        'message': f'{created_count} default port prioritization rules created.',
+                        'created_count': created_count
+                    })
+                else:
+                    return JsonResponse({
+                        'status': 'info',
+                        'message': 'Default rules already exist.',
+                        'created_count': 0
+                    })
+            except Exception as e:
+                return JsonResponse({
+                    'status': 'error',
+                    'message': f'Error creating default rules: {str(e)}'
+                })
+        
+        return JsonResponse({'status': 'error', 'message': 'Invalid request method'})
+    
+    def save_model(self, request, obj, form, change):
+        """Handle saving port prioritization rules and apply traffic control"""
+        from django.contrib import messages
+        
+        # Save the model first
+        super().save_model(request, obj, form, change)
+        
+        # If the rule is active, apply traffic control automatically
+        if obj.is_active:
+            try:
+                if obj.apply_traffic_control():
+                    if not change:  # New rule
+                        messages.success(request, f'Port prioritization rule "{obj.rule_name}" created and traffic control applied successfully.')
+                    else:  # Updated rule
+                        messages.success(request, f'Port prioritization rule "{obj.rule_name}" updated and traffic control applied successfully.')
+                else:
+                    messages.warning(request, f'Port prioritization rule "{obj.rule_name}" saved but traffic control application failed.')
+            except Exception as e:
+                messages.error(request, f'Port prioritization rule "{obj.rule_name}" saved but error applying traffic control: {str(e)}')
+        else:
+            # If rule is inactive, remove traffic control
+            try:
+                obj.remove_traffic_control()
+                if not change:
+                    messages.success(request, f'Port prioritization rule "{obj.rule_name}" created (inactive).')
+                else:
+                    messages.success(request, f'Port prioritization rule "{obj.rule_name}" updated (inactive) and traffic control removed.')
+            except Exception as e:
+                messages.warning(request, f'Port prioritization rule "{obj.rule_name}" saved but error removing traffic control: {str(e)}')
+
+admin.site.register(models.PortPrioritization, PortPrioritizationAdmin)

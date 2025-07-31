@@ -193,6 +193,9 @@ JAZZMIN_SETTINGS = {
         # ZeroTier Remote Monitoring
         'app.ZeroTierSettings': 'fas fa-satellite-dish',
         'app.ZeroTierMonitoringData': 'fas fa-chart-line',
+        
+        # Port Prioritization/QoS
+        'app.PortPrioritization': 'fas fa-layer-group',
     },
     
     # Custom CSS and JS
