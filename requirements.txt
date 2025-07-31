@@ -1,9 +1,30 @@
-Django==3.1.14
-cryptography==3.3.2
-rsa==4.7
-getmac==0.8.2
-Pillow==9.0.1
-celery==5.2.2
-django-jazzmin==2.2.11
-djangorestframework==3.12.1
-requests==2.32.4
+# Core Django and Web Framework
+Django>=4.2.16,<5.0  # LTS version with security patches
+djangorestframework>=3.15.2
+
+# Security and Cryptography
+cryptography>=41.0.0
+requests>=2.32.4
+python-decouple>=3.8  # For environment variable management
+
+# Database
+psycopg2-binary>=2.9.9  # PostgreSQL adapter (recommended for production)
+
+# Media handling
+Pillow>=10.4.0
+
+# Admin Interface
+django-jazzmin>=2.6.0
+
+# Utilities
+getmac>=0.9.5
+celery>=5.3.6  # For background tasks
+
+# Development and Security
+django-environ>=0.11.2  # Environment management
+django-ratelimit>=4.1.0  # Rate limiting
+django-cors-headers>=4.3.1  # CORS handling
+
+# Production server (optional)
+gunicorn>=21.2.0
+whitenoise>=6.6.0  # Static file serving

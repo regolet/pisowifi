@@ -1,7 +1,7 @@
 from django.core.exceptions import ObjectDoesNotExist
 from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse, HttpResponseForbidden, HttpResponse, Http404
-from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.csrf import csrf_protect, ensure_csrf_cookie
 from django.utils.decorators import method_decorator
 from django.shortcuts import render, redirect
 from django.views import View
@@ -20,36 +20,161 @@ import time, math, json
 import socket
 import struct
 import os
+import logging
 from django.conf import settings
+
+# Get logger for this module
+logger = logging.getLogger('app')
+security_logger = logging.getLogger('security')
 
 local_ip = ['::1', '127.0.0.1', '10.0.0.1']
 
 def get_available_banner_images():
     """
-    Get list of available banner images from the background folder
-    Returns list of image filenames that exist
+    Get list of available banner images from Portal admin models only
+    Returns list of image data (url, alt_text, link_url) for portal display
     """
+    from . import models
+    
     banner_images = []
-    background_path = os.path.join(settings.STATIC_ROOT or settings.BASE_DIR, 'app', 'static', 'background', '1')
     
-    # If STATIC_ROOT doesn't exist, try the development path
-    if not os.path.exists(background_path):
-        background_path = os.path.join(settings.BASE_DIR, 'app', 'static', 'background', '1')
-    
-    # List of potential banner images to check
-    potential_images = ['ml.jpg', 'ml_EsmybeO.jpg', 'pubg.jpg', 'banner1.jpg', 'banner2.jpg', 'banner3.jpg']
-    
-    if os.path.exists(background_path):
-        for image in potential_images:
-            image_path = os.path.join(background_path, image)
-            if os.path.isfile(image_path):
-                banner_images.append(image)
-    
-    # If no images found, return a default list (fallback)
-    if not banner_images:
-        banner_images = ['ml.jpg']  # Default fallback
+    # Get banners from Portal admin models only
+    try:
+        # Get the active portal settings first
+        portal_settings = models.PortalSettings.objects.first()
+        if portal_settings:
+            active_banners = models.PortalBanner.objects.filter(
+                portal_settings=portal_settings,
+                is_active=True,
+                banner_type='carousel'
+            ).order_by('display_order', 'name')
+            
+            for banner in active_banners:
+                # Check if banner is scheduled to be active
+                if banner.is_scheduled_active():
+                    banner_images.append({
+                        'url': banner.image.url if banner.image else '',
+                        'alt_text': banner.alt_text or banner.name,
+                        'link_url': banner.link_url,
+                        'open_in_new_tab': banner.open_in_new_tab,
+                        'source': 'database'
+                    })
+    except Exception as e:
+        logger.error(f"Error loading portal banners: {e}")
     
     return banner_images
+
+def get_portal_audio_files():
+    """
+    Get active portal audio files from database only
+    Returns dict with audio file URLs by type
+    """
+    from . import models
+    
+    audio_files = {}
+    
+    try:
+        # Get the active portal settings first
+        portal_settings = models.PortalSettings.objects.first()
+        if portal_settings:
+            active_audio = models.PortalAudio.objects.filter(
+                portal_settings=portal_settings,
+                is_active=True
+            )
+            
+            for audio in active_audio:
+                if audio.audio_file:
+                    audio_files[audio.audio_type] = {
+                        'url': audio.audio_file.url,
+                        'volume': audio.volume,
+                        'loop': audio.loop,
+                        'name': audio.name
+                    }
+    except Exception as e:
+        logger.error(f"Error loading portal audio files: {e}")
+    
+    return audio_files
+
+def get_portal_settings():
+    """
+    Get portal settings from database or return defaults
+    """
+    from . import models
+    
+    try:
+        portal_settings = models.PortalSettings.objects.first()
+        if portal_settings:
+            return {
+                'portal_title': portal_settings.portal_title,
+                'portal_subtitle': portal_settings.portal_subtitle,
+                'hotspot_name': portal_settings.hotspot_name,
+                'hotspot_address': portal_settings.hotspot_address,
+                'logo': portal_settings.logo.url if portal_settings.logo else None,
+                'favicon': portal_settings.favicon.url if portal_settings.favicon else None,
+                'primary_color': portal_settings.primary_color,
+                'secondary_color': portal_settings.secondary_color,
+                'background_color': portal_settings.background_color,
+                'text_color': portal_settings.text_color,
+                'redirect_url': portal_settings.redirect_url,
+                'show_timer': portal_settings.show_timer,
+                'show_data_usage': portal_settings.show_data_usage,
+                'auto_refresh_interval': portal_settings.auto_refresh_interval,
+                'enable_vouchers': portal_settings.enable_vouchers,
+                'enable_pause_resume': portal_settings.enable_pause_resume,
+                'pause_resume_min_time': portal_settings.pause_resume_min_time,
+                'enable_social_login': portal_settings.enable_social_login,
+                'maintenance_mode': portal_settings.maintenance_mode,
+                'maintenance_message': portal_settings.maintenance_message
+            }
+    except Exception as e:
+        print(f"Error loading portal settings: {e}")
+    
+    # Return defaults if no settings found
+    return {
+        'portal_title': 'PISOWifi Portal',
+        'portal_subtitle': '',
+        'hotspot_name': 'PISOWifi Hotspot',
+        'hotspot_address': '',
+        'logo': None,
+        'favicon': None,
+        'primary_color': '#007bff',
+        'secondary_color': '#6c757d',
+        'background_color': '#ffffff',
+        'text_color': '#212529',
+        'redirect_url': '',
+        'show_timer': True,
+        'show_data_usage': True,
+        'auto_refresh_interval': 30,
+        'enable_vouchers': True,
+        'enable_pause_resume': True,
+        'pause_resume_min_time': None,
+        'enable_social_login': False,
+        'maintenance_mode': False,
+        'maintenance_message': ''
+    }
+
+def get_portal_texts():
+    """
+    Get portal text content from database
+    """
+    from . import models
+    
+    texts = {}
+    
+    try:
+        active_texts = models.PortalText.objects.filter(is_active=True, language='en')
+        
+        for text in active_texts:
+            texts[text.text_type] = {
+                'content': text.get_safe_content(),
+                'font_size': text.font_size,
+                'font_weight': text.font_weight,
+                'text_align': text.text_align
+            }
+    except Exception as e:
+        print(f"Error loading portal texts: {e}")
+    
+    return texts
 
 def check_internet_connectivity():
     """
@@ -76,16 +201,16 @@ def get_ttl_from_ip(ip_address):
     Returns None if unable to detect TTL
     """
     try:
-        # Use ping to get TTL value
-        import platform
-        system = platform.system().lower()
+        from .utils.security import safe_ping_command, validate_ip_address
         
-        if system == "windows":
-            cmd = f"ping -n 1 {ip_address}"
-        else:
-            cmd = f"ping -c 1 {ip_address}"
+        # Validate IP address first
+        if not validate_ip_address(ip_address):
+            return None
         
-        result = subprocess.run(cmd.split(), capture_output=True, text=True, timeout=5)
+        result = safe_ping_command(ip_address)
+        if not result:
+            return None
+            
         output = result.stdout
         
         # Parse TTL from ping output
@@ -107,7 +232,8 @@ def get_ttl_from_ip(ip_address):
                                 continue
         return None
     except Exception as e:
-        print(f"TTL detection error for {ip_address}: {e}")
+        logger.warning(f"TTL detection error for {ip_address}: {e}")
+        security_logger.warning(f"TTL detection attempt failed for IP {ip_address}")
         return None
 
 def analyze_ttl_for_sharing(mac_address, ttl_value, request=None):
@@ -317,12 +443,13 @@ def apply_ttl_firewall_rule(mac_address, ttl_value=1, duration_hours=2):
             Violation_Count=0
         )
         
-        # Generate iptables command
+        # Generate iptables command  
         iptables_cmd = ttl_rule.get_iptables_command()
         ttl_rule.Rule_Command = ' '.join(iptables_cmd)
         
-        # Apply the iptables rule
-        result = subprocess.run(iptables_cmd, capture_output=True, text=True, timeout=10)
+        # Apply the iptables rule safely
+        from .utils.security import safe_iptables_command
+        result = safe_iptables_command(iptables_cmd[1:])  # Remove 'iptables' from command
         
         if result.returncode == 0:
             ttl_rule.Rule_Status = 'active'
@@ -358,8 +485,9 @@ def remove_ttl_firewall_rule(mac_address):
         # Generate delete command
         delete_cmd = ttl_rule.get_iptables_delete_command()
         
-        # Remove the iptables rule
-        result = subprocess.run(delete_cmd, capture_output=True, text=True, timeout=10)
+        # Remove the iptables rule safely
+        from .utils.security import safe_iptables_command
+        result = safe_iptables_command(delete_cmd[1:])  # Remove 'iptables' from command
         
         # Update rule status regardless of iptables result (rule might not exist)
         ttl_rule.Rule_Status = 'disabled'
@@ -1111,10 +1239,10 @@ def getDeviceInfo(request):
         # Method 3: Check ARP table (Linux/Windows)
         if not mac and ip != '127.0.0.1':
             try:
-                import subprocess
+                from .utils.security import safe_arp_command
                 import re
-                result = subprocess.run(['arp', '-a', ip], capture_output=True, text=True, timeout=2)
-                if result.returncode == 0:
+                result = safe_arp_command(ip)
+                if result and result.returncode == 0:
                     # Parse MAC from ARP output
                     mac_match = re.search(r'([0-9a-fA-F]{2}[:-]){5}[0-9a-fA-F]{2}', result.stdout)
                     if mac_match:
@@ -1139,6 +1267,7 @@ def getDeviceInfo(request):
         return info
 
 
+@method_decorator(ensure_csrf_cookie, name='dispatch')
 class Portal(View):
     template_name = 'captive.html'
     
@@ -1305,7 +1434,9 @@ class Portal(View):
         info['rate_type'] = rate_type
         info['base_value'] = settings.Base_Value if rate_type == 'auto' else None
         info['hotspot'] = settings.Hotspot_Name
-        info['slot_timeout'] = settings.Slot_Timeout
+        # Get slot timeout from Portal Settings
+        portal_settings = models.PortalSettings.objects.first()
+        info['slot_timeout'] = portal_settings.slot_timeout if portal_settings else 300
         info['background'] = settings.BG_Image
         info['voucher_flg'] = settings.Vouchers_Flg
         info['pause_resume_flg'] = settings.Pause_Resume_Flg
@@ -1314,6 +1445,35 @@ class Portal(View):
         info['inactive_timeout'] = settings.Inactive_Timeout
         info['internet_connected'] = check_internet_connectivity()
         info['banner_images'] = get_available_banner_images()
+        
+        # Add Portal-specific settings from new models
+        portal_settings = get_portal_settings()
+        portal_audio = get_portal_audio_files()
+        portal_texts = get_portal_texts()
+        
+        # Merge portal settings into info
+        info.update(portal_settings)
+        info['portal_audio'] = portal_audio
+        info['portal_texts'] = portal_texts
+        
+        # Override some settings with portal settings if available
+        if portal_settings.get('redirect_url'):
+            info['redir_url'] = portal_settings['redirect_url']
+        if portal_settings.get('hotspot_name'):
+            info['hotspot'] = portal_settings['hotspot_name']
+        
+        # Map Portal Settings to legacy template variables for compatibility
+        if portal_settings.get('enable_pause_resume') is not None:
+            info['pause_resume_flg'] = 1 if portal_settings['enable_pause_resume'] else 0
+        if portal_settings.get('enable_vouchers') is not None:
+            info['voucher_flg'] = portal_settings['enable_vouchers']
+        
+        # Use Portal Settings pause_resume_min_time instead of Settings Disable_Pause_Time
+        portal_settings_model = models.PortalSettings.objects.first()
+        if portal_settings_model and portal_settings_model.pause_resume_min_time:
+            info['pause_resume_enable_time'] = int(timedelta.total_seconds(portal_settings_model.pause_resume_min_time))
+        else:
+            info['pause_resume_enable_time'] = 0
 
         return info
 
@@ -1367,8 +1527,8 @@ class Slot(View):
             try:
                 device_info = getDeviceInfo(request)
                 mac = device_info['mac']
-                settings = models.Settings.objects.get(pk=1)
-                timeout = settings.Slot_Timeout
+                portal_settings = models.PortalSettings.objects.first()
+                timeout = portal_settings.slot_timeout if portal_settings else 300
                 
                 # Check if this is a request to claim the slot (when opening insert coin modal)
                 claim_slot = request.GET.get('claim', False)
@@ -1479,8 +1639,8 @@ class Slot(View):
             mac = request.POST.get('mac')
 
             try:
-                settings = models.Settings.objects.get(pk=1)
-                timeout = settings.Slot_Timeout
+                portal_settings = models.PortalSettings.objects.first()
+                timeout = portal_settings.slot_timeout if portal_settings else 300
                 client = models.Clients.objects.get(MAC_Address=mac)
 
             except ObjectDoesNotExist as e:
@@ -1514,7 +1674,7 @@ class Slot(View):
         else:
             raise Http404("Page not found")
 
-@method_decorator(csrf_exempt, name='dispatch')
+@method_decorator(csrf_protect, name='dispatch')
 class SlotRelease(View):
     def post(self, request):
         """Release coin slot when client closes modal or times out"""
@@ -1541,7 +1701,7 @@ class SlotRelease(View):
         else:
             raise Http404("Page not found")
 
-@method_decorator(csrf_exempt, name='dispatch')
+@method_decorator(csrf_protect, name='dispatch')
 class SlotUpdate(View):
     def post(self, request):
         """Update coin slot timer from portal countdown"""
@@ -1555,36 +1715,32 @@ class SlotUpdate(View):
                 remaining_seconds = data.get('remaining_seconds', 0)
                 action = data.get('action', 'update')  # 'update' or 'expired'
                 
-                print(f"SlotUpdate received: MAC={mac}, remaining_seconds={remaining_seconds}, action={action}")
+                import logging
+                logger = logging.getLogger('app')
+                logger.debug(f"SlotUpdate: MAC={mac}, remaining_seconds={remaining_seconds}, action={action}")
                 
                 try:
                     slot_info = models.CoinSlot.objects.get(pk=1, Client=mac)
-                    print(f"Found slot for client {mac}")
                     
                     if action == 'expired' or remaining_seconds <= 0:
                         # Portal countdown expired, release the slot
-                        print(f"Releasing slot - action: {action}, remaining: {remaining_seconds}")
                         slot_info.Client = None
                         slot_info.Last_Updated = None
                         slot_info.save()
                         resp = {'status_code': 200, 'description': 'Slot expired and released'}
                     else:
                         # Update timestamp to reflect portal countdown
-                        # Calculate what the timestamp should be for the remaining time
-                        settings = models.Settings.objects.get(pk=1)
-                        timeout = settings.Slot_Timeout
+                        portal_settings = models.PortalSettings.objects.first()
+                        timeout = portal_settings.slot_timeout if portal_settings else 300
                         elapsed_seconds = timeout - remaining_seconds
                         new_timestamp = timezone.now() - timezone.timedelta(seconds=elapsed_seconds)
-                        
-                        print(f"Updating slot timestamp - timeout: {timeout}, remaining: {remaining_seconds}, elapsed: {elapsed_seconds}")
-                        print(f"New timestamp: {new_timestamp}")
                         
                         slot_info.Last_Updated = new_timestamp
                         slot_info.save()
                         resp = {'status_code': 200, 'description': 'Slot timer updated'}
                         
                 except models.CoinSlot.DoesNotExist:
-                    print(f"Slot not found for client {mac}")
+                    logger.warning(f"Slot not found for client {mac}")
                     resp = {'status_code': 404, 'description': 'Slot not found or not owned by this client'}
                 
                 return JsonResponse(resp, safe=False)
@@ -1594,7 +1750,7 @@ class SlotUpdate(View):
         else:
             raise Http404("Page not found")
 
-@method_decorator(csrf_exempt, name='dispatch')
+@method_decorator(csrf_protect, name='dispatch')
 class Pay(View):
     template_name = 'pay.html'
     
@@ -1682,8 +1838,8 @@ class Pay(View):
                     resp = api_response(900)
                 else:
                     connected_client = slot_info.Client
-                    settings = models.Settings.objects.get(pk=1)
-                    timeout = settings.Slot_Timeout
+                    portal_settings = models.PortalSettings.objects.first()
+                    timeout = portal_settings.slot_timeout if portal_settings else 300
                     time_diff = timedelta.total_seconds(timezone.now()-slot_info.Last_Updated)
 
                     if connected_client and timedelta(seconds=time_diff).total_seconds() < timeout:
@@ -1726,8 +1882,8 @@ class Commit(View):
                 return JsonResponse(data)
 
             try:
-                settings = models.Settings.objects.get(pk=1)
-                timeout = settings.Slot_Timeout
+                portal_settings = models.PortalSettings.objects.first()
+                timeout = portal_settings.slot_timeout if portal_settings else 300
 
                 # Check if client has an active slot (optional - for status only)
                 try:
@@ -1764,14 +1920,25 @@ class Browse(View):
         if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
             ip = request.GET.get('ip')
             mac = request.GET.get('mac')
+            
+            # Validate required parameters
+            if not ip or not mac:
+                resp = api_response(700)
+                resp['description'] = 'Missing IP or MAC address parameters'
+                return JsonResponse(data=resp)
 
             # Check connection limits before allowing connection
-            connection_status = check_connection_limit(mac, request)
-            
-            if not connection_status['can_connect']:
-                resp = api_response(700)
-                resp['description'] = f"Connection limit exceeded: {connection_status['reason']}"
-                return JsonResponse(data=resp)
+            try:
+                connection_status = check_connection_limit(mac, request)
+                
+                if not connection_status['can_connect']:
+                    resp = api_response(700)
+                    resp['description'] = f"Connection limit exceeded: {connection_status['reason']}"
+                    return JsonResponse(data=resp)
+            except Exception as e:
+                print(f"Error checking connection limits: {e}")
+                # Continue without connection limit check
+                connection_status = {'can_connect': True, 'connection_limit': 'unlimited'}
 
             try:
                 coin_queue = models.CoinQueue.objects.get(Client=mac)
@@ -1784,7 +1951,7 @@ class Browse(View):
                 # We'll use the first rate that matches the purchased time
                 matching_rate = None
                 for rate in models.Rates.objects.all():
-                    if rate.Rate_Value == addtl_time:
+                    if rate.Minutes == addtl_time:
                         matching_rate = rate
                         break
                 
@@ -1834,8 +2001,16 @@ class Browse(View):
                     'connection_limit': connection_status['connection_limit']
                 }
 
-            except ObjectDoesNotExist:
-                resp = api_response(700)    
+            except models.CoinQueue.DoesNotExist:
+                resp = api_response(700)
+                resp['description'] = 'No coins inserted. Please insert coins first.'
+            except models.Clients.DoesNotExist:
+                resp = api_response(700)
+                resp['description'] = 'Client not found. Please refresh the page.'
+            except Exception as e:
+                print(f"Browse view error: {e}")
+                resp = api_response(700)
+                resp['description'] = f'Connection error: {str(e)}'
 
             return JsonResponse(data=resp)
         else:
@@ -1959,8 +2134,9 @@ class Redeem(View):
                         }
                     )
                     
-                    print(f"[VOUCHER DEBUG] Client before connect: MAC={client.MAC_Address}, Time_Left={client.Time_Left}, Status={client.Connection_Status}")
-                    print(f"[VOUCHER DEBUG] Adding time: {time_value} ({time_value.total_seconds()} seconds)")
+                    import logging
+                    logger = logging.getLogger('app')
+                    logger.info(f"Voucher redemption: Client {client.MAC_Address} adding {time_value.total_seconds()} seconds")
                     
                     # Check if voucher has validity period and set Validity_Expires_On
                     validity_duration = voucher.get_validity_duration()
@@ -1987,9 +2163,7 @@ class Redeem(View):
                     # Connect the client with voucher time
                     connect_success = client.Connect(time_value)
                     
-                    print(f"[VOUCHER DEBUG] Connect result: {connect_success}")
-                    print(f"[VOUCHER DEBUG] Client after connect: Time_Left={client.Time_Left}, Expire_On={client.Expire_On}")
-                    print(f"[VOUCHER DEBUG] Validity expires on: {client.Validity_Expires_On}")
+                    logger.info(f"Voucher connection result for {mac}: {'Success' if connect_success else 'Failed'}")
                     
                     if connect_success:
                         # Mark voucher as used
@@ -1997,7 +2171,7 @@ class Redeem(View):
                         voucher.Voucher_used_date_time = timezone.now()
                         voucher.save()
                         
-                        print(f"[VOUCHER DEBUG] Voucher marked as used: {voucher.Voucher_code}")
+                        logger.info(f"Voucher redeemed successfully: {voucher.Voucher_code}")
                         
                         # Success response with validity info
                         resp = api_response(200)
@@ -2012,7 +2186,7 @@ class Redeem(View):
                         
                         resp['description'] = f'Voucher redeemed successfully. {time_desc}{validity_desc}.'
                     else:
-                        print(f"[VOUCHER DEBUG] Connect failed for client {mac}")
+                        logger.warning(f"Voucher connection failed for client {mac}")
                         resp = api_response(800)
                         resp['description'] = 'Failed to add time to client account'
                         return JsonResponse(resp)
