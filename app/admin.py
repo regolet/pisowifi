@@ -2423,6 +2423,39 @@ class SystemUpdateAdmin(admin.ModelAdmin):
                 '<i class="fas fa-trash" style="margin-right: 3px;"></i>Remove</a>',
                 obj.pk
             ))
+        elif obj.Status == 'installing':
+            # Check if the installation seems stuck (more than 30 minutes)
+            from django.utils import timezone
+            import datetime
+            
+            if obj.Started_At and (timezone.now() - obj.Started_At) > datetime.timedelta(minutes=30):
+                # Show retry and repair options if stuck
+                buttons.append(format_html(
+                    '<a class="button" href="#" onclick="retryUpdate({}); return false;" title="Retry installation" '
+                    'style="background-color: #007bff; color: white; padding: 4px 8px; text-decoration: none; border-radius: 3px; margin: 1px; font-size: 11px; white-space: nowrap;">'
+                    '<i class="fas fa-redo" style="margin-right: 3px;"></i>Retry</a>',
+                    obj.pk
+                ))
+                buttons.append(format_html(
+                    '<a class="button" href="#" onclick="repairUpdate({}); return false;" title="Repair installation" '
+                    'style="background-color: #17a2b8; color: white; padding: 4px 8px; text-decoration: none; border-radius: 3px; margin: 1px; font-size: 11px; white-space: nowrap;">'
+                    '<i class="fas fa-wrench" style="margin-right: 3px;"></i>Repair</a>',
+                    obj.pk
+                ))
+            else:
+                # Show loading indicator for active installations
+                buttons.append(format_html(
+                    '<span class="button" style="background-color: #6c757d; color: white; padding: 4px 8px; text-decoration: none; border-radius: 3px; margin: 1px; font-size: 11px; white-space: nowrap;">'
+                    '<i class="fas fa-spinner fa-spin" style="margin-right: 3px;"></i>Installing...</span>'
+                ))
+            
+            # Always show option to force stop
+            buttons.append(format_html(
+                '<a class="button" href="#" onclick="if(confirm(\'Force stop installation? This may leave the system in an inconsistent state.\')) {{ removeUpdate({}); }} return false;" title="Force stop" '
+                'style="background-color: #dc3545; color: white; padding: 4px 8px; text-decoration: none; border-radius: 3px; margin: 1px; font-size: 11px; white-space: nowrap;">'
+                '<i class="fas fa-stop" style="margin-right: 3px;"></i>Force Stop</a>',
+                obj.pk
+            ))
         elif obj.Status == 'completed':
             if obj.can_rollback():
                 buttons.append(format_html(
@@ -2790,10 +2823,11 @@ class SystemUpdateAdmin(admin.ModelAdmin):
         try:
             update = models.SystemUpdate.objects.get(pk=pk)
             
-            if update.Status != 'failed':
+            # Allow retry for both failed and stuck installing updates
+            if update.Status not in ['failed', 'installing']:
                 return JsonResponse({
-                    'status': 'error', 
-                    'message': 'Retry only available for failed updates'
+                    'status': 'error',
+                    'message': 'Retry only available for failed or stuck updates'
                 })
             
             # Check if we need to download first or can directly install
@@ -2809,6 +2843,9 @@ class SystemUpdateAdmin(admin.ModelAdmin):
                 try:
                     fresh_update = models.SystemUpdate.objects.get(pk=pk)
                     service = UpdateInstallService(fresh_update)
+                    
+                    # Clean up any stuck state first
+                    service.cleanup_stuck_update()
                     
                     # Reset status and clear previous errors
                     fresh_update.Status = 'installing'

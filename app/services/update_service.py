@@ -249,6 +249,7 @@ class UpdateInstallService:
             self._log("Starting installation process")
             self.update.Status = 'installing'
             self.update.Progress = 0
+            self.update.Started_At = timezone.now()  # Ensure we record start time
             self.update.save()
             
             # Create backup if enabled
@@ -265,9 +266,30 @@ class UpdateInstallService:
             update_file = os.path.join(self.temp_path, f"update_{self.update.Version_Number}.zip")
             extract_path = os.path.join(self.temp_path, f"extracted_{self.update.Version_Number}")
             
-            with zipfile.ZipFile(update_file, 'r') as zip_ref:
-                zip_ref.extractall(extract_path)
-                self._log(f"Extracted {len(zip_ref.namelist())} files")
+            # Ensure extraction path exists and is clean
+            if os.path.exists(extract_path):
+                shutil.rmtree(extract_path)
+            os.makedirs(extract_path, exist_ok=True)
+            
+            try:
+                with zipfile.ZipFile(update_file, 'r') as zip_ref:
+                    total_files = len(zip_ref.namelist())
+                    self._log(f"Starting extraction of {total_files} files")
+                    
+                    # Extract with progress tracking
+                    for i, member in enumerate(zip_ref.namelist()):
+                        zip_ref.extract(member, extract_path)
+                        # Update progress during extraction (30% to 50% of total progress)
+                        extraction_progress = 30 + int((i / total_files) * 20)
+                        if i % 100 == 0:  # Update every 100 files to avoid too many DB writes
+                            self.update.Progress = extraction_progress
+                            self.update.save(update_fields=['Progress'])
+                    
+                    self._log(f"Successfully extracted {total_files} files")
+            except zipfile.BadZipFile:
+                raise Exception("The update file is corrupted or not a valid zip file")
+            except Exception as e:
+                raise Exception(f"Extraction failed: {str(e)}")
             
             self.update.Progress = 50
             self.update.save()
@@ -460,6 +482,27 @@ class UpdateInstallService:
                     
         except Exception as e:
             self._log(f"Permission fix warning: {e}", "WARNING")
+    
+    def cleanup_stuck_update(self):
+        """Clean up a stuck update and reset its state"""
+        try:
+            self._log("Cleaning up stuck update")
+            
+            # Clean up any extracted files
+            extract_path = os.path.join(self.temp_path, f"extracted_{self.update.Version_Number}")
+            if os.path.exists(extract_path):
+                shutil.rmtree(extract_path)
+                self._log(f"Removed extraction directory: {extract_path}")
+            
+            # Reset update status
+            self.update.Status = 'failed'
+            self.update.Error_Message = 'Installation was forcefully stopped'
+            self.update.save()
+            
+            return {'status': 'success'}
+        except Exception as e:
+            self._log(f"Cleanup error: {str(e)}", "ERROR")
+            return {'status': 'error', 'message': str(e)}
     
     def rollback_update(self):
         """Rollback to previous version"""
