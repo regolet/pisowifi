@@ -14,16 +14,34 @@
     function checkForUpdates() {
     showLoadingOverlay('Checking for updates...');
     
+    const csrfToken = getCookie('csrftoken');
+    console.log('CSRF Token:', csrfToken); // Debug log
+    
     fetch('/admin/app/systemupdate/check-updates/', {
         method: 'POST',
         headers: {
-            'X-CSRFToken': getCookie('csrftoken'),
+            'X-CSRFToken': csrfToken,
             'Content-Type': 'application/json',
         },
+        credentials: 'same-origin', // Ensure cookies are sent
     })
-    .then(response => response.json())
+    .then(response => {
+        console.log('Response status:', response.status); // Debug log
+        console.log('Response headers:', response.headers); // Debug log
+        
+        if (!response.ok) {
+            // If response is not ok, try to get the error text
+            return response.text().then(text => {
+                console.log('Error response text:', text);
+                throw new Error(`HTTP ${response.status}: ${text.substring(0, 200)}`);
+            });
+        }
+        return response.json();
+    })
     .then(data => {
         hideLoadingOverlay();
+        console.log('Response data:', data); // Debug log
+        
         if (data.status === 'success') {
             if (data.updates_available) {
                 showNotification('Updates available!', 'success');
@@ -37,7 +55,7 @@
     })
     .catch(error => {
         hideLoadingOverlay();
-        showNotification('Network error while checking for updates', 'error');
+        showNotification('Network error while checking for updates: ' + error.message, 'error');
         console.error('Error:', error);
     });
 }

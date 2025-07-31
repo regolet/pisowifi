@@ -2749,9 +2749,15 @@ class SystemUpdateAdmin(admin.ModelAdmin):
     
     def get_urls(self):
         from django.urls import path
+        from django.views.decorators.csrf import csrf_exempt
+        from django.contrib.admin.views.decorators import staff_member_required
+        
+        # Create a properly wrapped view with both authentication and CSRF exemption
+        wrapped_check_updates = csrf_exempt(staff_member_required(self.check_updates_view))
+        
         urls = super().get_urls()
         custom_urls = [
-            path('check-updates/', self.admin_site.admin_view(self.check_updates_view), name='app_systemupdate_check'),
+            path('check-updates/', wrapped_check_updates, name='app_systemupdate_check'),
             path('<int:pk>/download/', self.admin_site.admin_view(self.download_update_view), name='app_systemupdate_download'),
             path('<int:pk>/install/', self.admin_site.admin_view(self.install_update_view), name='app_systemupdate_install'),
             path('<int:pk>/rollback/', self.admin_site.admin_view(self.rollback_update_view), name='app_systemupdate_rollback'),
@@ -2767,6 +2773,10 @@ class SystemUpdateAdmin(admin.ModelAdmin):
     def check_updates_view(self, request):
         from django.http import JsonResponse
         from app.services.update_service import GitHubUpdateService
+        import logging
+        
+        logger = logging.getLogger(__name__)
+        logger.info(f"Check updates view called by user: {request.user}, is_staff: {request.user.is_staff if request.user.is_authenticated else 'Anonymous'}")
         
         try:
             service = GitHubUpdateService()
@@ -2778,6 +2788,7 @@ class SystemUpdateAdmin(admin.ModelAdmin):
             
             return JsonResponse(result)
         except Exception as e:
+            logger.error(f"Error in check_updates_view: {str(e)}")
             return JsonResponse({'status': 'error', 'message': str(e)})
     
     def download_update_view(self, request, pk):
