@@ -10,6 +10,8 @@
 
     let updateProgressInterval = null;
     let sessionKeepAliveInterval = null;
+    let installationTimeoutId = null;
+    let authErrorCount = 0;
 
     // Check for updates from GitHub
     function checkForUpdates() {
@@ -327,10 +329,20 @@
 
 // Progress tracking for installations
     function startInstallTracking(updateId) {
+    // Reset auth error counter
+    authErrorCount = 0;
+    
     // Keep session alive during long installations
     sessionKeepAliveInterval = setInterval(() => {
         fetch('/admin/', { credentials: 'same-origin' }).catch(() => {});
     }, 300000); // Every 5 minutes
+    
+    // Set a maximum timeout for installations (30 minutes)
+    installationTimeoutId = setTimeout(() => {
+        console.warn('Installation tracking timeout - stopping tracking but installation may still be running');
+        showNotification('Installation tracking timeout. Please refresh the page to check status.', 'warning');
+        stopProgressTracking();
+    }, 1800000); // 30 minutes
     
     updateProgressInterval = setInterval(() => {
         fetch(`/admin/app/systemupdate/${updateId}/install-progress/`, {
@@ -376,19 +388,41 @@
                 hideTerminal();
                 showNotification('Update installation failed: ' + (data.error || 'Unknown error'), 'error');
                 setTimeout(() => location.reload(), 1000);
+            } else if (data.status === 'installing') {
+                // Show that installation is progressing
+                updateProgressDisplay(updateId, data.progress || 0, 'installing');
             }
         })
         .catch(error => {
             console.error('Install tracking error:', error);
+            
+            // Check if it's an authentication error based on the error message
+            if (error.message.includes('Authentication required') || 
+                error.message.includes('Unexpected token') || 
+                error.message.includes('<!DOCTYPE')) {
+                
+                authErrorCount++;
+                console.warn(`Authentication issue detected during install tracking (${authErrorCount}/5) - attempting to continue`);
+                
+                if (authErrorCount >= 5) {
+                    console.warn('Too many authentication errors - stopping tracking');
+                    showNotification('Session expired. Installation may still be running. Please refresh the page to check status.', 'warning');
+                    stopProgressTracking();
+                    return;
+                }
+                
+                showNotification('Session authentication issue detected. Installation may still be running in background.', 'warning');
+                
+                // Don't stop tracking immediately - give it a few more tries
+                // The installation might still be running even if we can't get status updates
+                return;
+            }
+            
+            // For other errors, stop tracking
             stopProgressTracking();
             hideLoadingOverlay();
             hideTerminal();
-            
-            if (error.message.includes('Authentication required')) {
-                showNotification('Session expired. Please refresh the page and login again.', 'error');
-            } else {
-                showNotification('Connection error during installation tracking: ' + error.message, 'error');
-            }
+            showNotification('Connection error during installation tracking: ' + error.message, 'error');
         });
         
         // Also fetch installation logs
@@ -405,6 +439,11 @@
         clearInterval(sessionKeepAliveInterval);
         sessionKeepAliveInterval = null;
     }
+    if (installationTimeoutId) {
+        clearTimeout(installationTimeoutId);
+        installationTimeoutId = null;
+    }
+    authErrorCount = 0;
 }
 
 // Update progress display
@@ -545,7 +584,14 @@
         }
     })
     .catch(error => {
-        console.error('Error fetching installation logs:', error);
+        // Only log authentication-related errors as warnings, not errors
+        if (error.message.includes('Unexpected token') || 
+            error.message.includes('<!DOCTYPE') ||
+            error.message.includes('Authentication required')) {
+            console.warn('Authentication issue fetching installation logs (non-critical):', error.message);
+        } else {
+            console.error('Error fetching installation logs:', error);
+        }
         // Don't show error notification for logs as it's not critical
     });
 }
