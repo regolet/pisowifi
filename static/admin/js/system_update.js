@@ -9,6 +9,7 @@
     window.systemUpdateLoaded = true;
 
     let updateProgressInterval = null;
+    let sessionKeepAliveInterval = null;
 
     // Check for updates from GitHub
     function checkForUpdates() {
@@ -326,11 +327,28 @@
 
 // Progress tracking for installations
     function startInstallTracking(updateId) {
+    // Keep session alive during long installations
+    sessionKeepAliveInterval = setInterval(() => {
+        fetch('/admin/', { credentials: 'same-origin' }).catch(() => {});
+    }, 300000); // Every 5 minutes
+    
     updateProgressInterval = setInterval(() => {
-        fetch(`/admin/app/systemupdate/${updateId}/install-progress/`)
+        fetch(`/admin/app/systemupdate/${updateId}/install-progress/`, {
+            credentials: 'same-origin'
+        })
         .then(response => {
+            console.log('Install progress response status:', response.status);
+            
             if (!response.ok) {
-                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                if (response.status === 302 || response.status === 403) {
+                    // Authentication issue - user session might have expired
+                    throw new Error('Authentication required. Please refresh the page and login again.');
+                }
+                
+                return response.text().then(text => {
+                    console.log('Install progress error response:', text);
+                    throw new Error(`HTTP ${response.status}: ${text.substring(0, 200)}`);
+                });
             }
             return response.json();
         })
@@ -365,7 +383,12 @@
             stopProgressTracking();
             hideLoadingOverlay();
             hideTerminal();
-            showNotification('Connection error during installation tracking', 'error');
+            
+            if (error.message.includes('Authentication required')) {
+                showNotification('Session expired. Please refresh the page and login again.', 'error');
+            } else {
+                showNotification('Connection error during installation tracking: ' + error.message, 'error');
+            }
         });
         
         // Also fetch installation logs
@@ -377,6 +400,10 @@
     if (updateProgressInterval) {
         clearInterval(updateProgressInterval);
         updateProgressInterval = null;
+    }
+    if (sessionKeepAliveInterval) {
+        clearInterval(sessionKeepAliveInterval);
+        sessionKeepAliveInterval = null;
     }
 }
 
@@ -491,17 +518,29 @@
 }
 
     function fetchInstallationLogs(updateId) {
-    fetch(`/admin/app/systemupdate/${updateId}/installation-logs/`)
+    fetch(`/admin/app/systemupdate/${updateId}/installation-logs/`, {
+        credentials: 'same-origin'
+    })
     .then(response => {
+        console.log('Installation logs response status:', response.status);
+        
         if (!response.ok) {
-            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            if (response.status === 302 || response.status === 403) {
+                // Authentication issue - don't show error for logs as it's not critical
+                return null;
+            }
+            
+            return response.text().then(text => {
+                console.log('Installation logs error response:', text);
+                throw new Error(`HTTP ${response.status}: ${text.substring(0, 200)}`);
+            });
         }
         return response.json();
     })
     .then(data => {
-        if (data.status === 'success') {
+        if (data && data.status === 'success') {
             updateTerminalContent(data.logs);
-        } else {
+        } else if (data && data.message) {
             console.error('Error in installation logs response:', data.message);
         }
     })

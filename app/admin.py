@@ -1429,7 +1429,8 @@ class VouchersAdmin(admin.ModelAdmin):
             obj.pk
         ))
         
-        return format_html(' '.join(buttons))
+        from django.utils.safestring import mark_safe
+        return mark_safe(' '.join(buttons))
     
     action_buttons.short_description = 'Actions'
     
@@ -2720,7 +2721,8 @@ class SystemUpdateAdmin(admin.ModelAdmin):
                 obj.pk
             ))
         
-        return format_html(' '.join(str(button) for button in buttons))
+        from django.utils.safestring import mark_safe
+        return mark_safe(' '.join(str(button) for button in buttons))
     action_buttons.short_description = 'Actions'
     
     class Media:
@@ -3342,7 +3344,8 @@ class DatabaseBackupAdmin(admin.ModelAdmin):
                 obj.pk
             ))
         
-        return format_html(' '.join(str(button) for button in buttons))
+        from django.utils.safestring import mark_safe
+        return mark_safe(' '.join(str(button) for button in buttons))
     action_buttons.short_description = 'Actions'
     
     def has_add_permission(self, request):
