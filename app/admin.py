@@ -2752,21 +2752,30 @@ class SystemUpdateAdmin(admin.ModelAdmin):
         from django.views.decorators.csrf import csrf_exempt
         from django.contrib.admin.views.decorators import staff_member_required
         
-        # Create a properly wrapped view with both authentication and CSRF exemption
+        # Create properly wrapped views with both authentication and CSRF exemption for all AJAX endpoints
         wrapped_check_updates = csrf_exempt(staff_member_required(self.check_updates_view))
+        wrapped_download = csrf_exempt(staff_member_required(self.download_update_view))
+        wrapped_install = csrf_exempt(staff_member_required(self.install_update_view))
+        wrapped_rollback = csrf_exempt(staff_member_required(self.rollback_update_view))
+        wrapped_progress = csrf_exempt(staff_member_required(self.progress_view))
+        wrapped_install_progress = csrf_exempt(staff_member_required(self.install_progress_view))
+        wrapped_installation_logs = csrf_exempt(staff_member_required(self.installation_logs_view))
+        wrapped_remove = csrf_exempt(staff_member_required(self.remove_update_view))
+        wrapped_repair = csrf_exempt(staff_member_required(self.repair_update_view))
+        wrapped_retry = csrf_exempt(staff_member_required(self.retry_update_view))
         
         urls = super().get_urls()
         custom_urls = [
             path('check-updates/', wrapped_check_updates, name='app_systemupdate_check'),
-            path('<int:pk>/download/', self.admin_site.admin_view(self.download_update_view), name='app_systemupdate_download'),
-            path('<int:pk>/install/', self.admin_site.admin_view(self.install_update_view), name='app_systemupdate_install'),
-            path('<int:pk>/rollback/', self.admin_site.admin_view(self.rollback_update_view), name='app_systemupdate_rollback'),
-            path('<int:pk>/progress/', self.admin_site.admin_view(self.progress_view), name='app_systemupdate_progress'),
-            path('<int:pk>/install-progress/', self.admin_site.admin_view(self.install_progress_view), name='app_systemupdate_install_progress'),
-            path('<int:pk>/installation-logs/', self.admin_site.admin_view(self.installation_logs_view), name='app_systemupdate_installation_logs'),
-            path('<int:pk>/remove/', self.admin_site.admin_view(self.remove_update_view), name='app_systemupdate_remove'),
-            path('<int:pk>/repair/', self.admin_site.admin_view(self.repair_update_view), name='app_systemupdate_repair'),
-            path('<int:pk>/retry/', self.admin_site.admin_view(self.retry_update_view), name='app_systemupdate_retry'),
+            path('<int:pk>/download/', wrapped_download, name='app_systemupdate_download'),
+            path('<int:pk>/install/', wrapped_install, name='app_systemupdate_install'),
+            path('<int:pk>/rollback/', wrapped_rollback, name='app_systemupdate_rollback'),
+            path('<int:pk>/progress/', wrapped_progress, name='app_systemupdate_progress'),
+            path('<int:pk>/install-progress/', wrapped_install_progress, name='app_systemupdate_install_progress'),
+            path('<int:pk>/installation-logs/', wrapped_installation_logs, name='app_systemupdate_installation_logs'),
+            path('<int:pk>/remove/', wrapped_remove, name='app_systemupdate_remove'),
+            path('<int:pk>/repair/', wrapped_repair, name='app_systemupdate_repair'),
+            path('<int:pk>/retry/', wrapped_retry, name='app_systemupdate_retry'),
         ]
         return custom_urls + urls
     

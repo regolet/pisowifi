@@ -66,12 +66,15 @@
     updateDownloadButtonState(updateId, 'loading');
     showLoadingOverlay('Starting download...');
     
+    const csrfToken = getCookie('csrftoken');
+    
     fetch(`/admin/app/systemupdate/${updateId}/download/`, {
         method: 'POST',
         headers: {
-            'X-CSRFToken': getCookie('csrftoken'),
+            'X-CSRFToken': csrfToken,
             'Content-Type': 'application/json',
         },
+        credentials: 'same-origin',
     })
     .then(response => response.json())
     .then(data => {
@@ -119,12 +122,15 @@
     showLoadingOverlay('Installing update... Please do not close this page.');
     showTerminal(updateId);
     
+    const csrfToken = getCookie('csrftoken');
+    
     fetch(`/admin/app/systemupdate/${updateId}/install/`, {
         method: 'POST',
         headers: {
-            'X-CSRFToken': getCookie('csrftoken'),
+            'X-CSRFToken': csrfToken,
             'Content-Type': 'application/json',
         },
+        credentials: 'same-origin',
     })
     .then(response => response.json())
     .then(data => {
@@ -185,16 +191,31 @@
     
     showLoadingOverlay('Removing update...');
     
+    const csrfToken = getCookie('csrftoken');
+    
     fetch(`/admin/app/systemupdate/${updateId}/remove/`, {
         method: 'POST',
         headers: {
-            'X-CSRFToken': getCookie('csrftoken'),
+            'X-CSRFToken': csrfToken,
             'Content-Type': 'application/json',
         },
+        credentials: 'same-origin',
     })
-    .then(response => response.json())
+    .then(response => {
+        console.log('Remove response status:', response.status);
+        
+        if (!response.ok) {
+            return response.text().then(text => {
+                console.log('Remove error response text:', text);
+                throw new Error(`HTTP ${response.status}: ${text.substring(0, 200)}`);
+            });
+        }
+        return response.json();
+    })
     .then(data => {
         hideLoadingOverlay();
+        console.log('Remove response data:', data);
+        
         if (data.status === 'success') {
             showNotification('Update removed successfully', 'success');
             setTimeout(() => location.reload(), 1000);
@@ -204,7 +225,7 @@
     })
     .catch(error => {
         hideLoadingOverlay();
-        showNotification('Network error while removing update', 'error');
+        showNotification('Network error while removing update: ' + error.message, 'error');
         console.error('Error:', error);
     });
 }
