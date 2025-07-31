@@ -115,22 +115,23 @@ class Clients(models.Model):
             ]
             
             kicked_successfully = False
+            from app.utils.security import execute_safe_command
+            
             for cmd in kick_commands:
                 try:
-                    result = subprocess.run(cmd.split(), capture_output=True, text=True, timeout=5)
-                    if result.returncode == 0:
+                    success = execute_safe_command(cmd.split())
+                    if success:
                         kicked_successfully = True
                         break
-                except (subprocess.TimeoutExpired, subprocess.CalledProcessError, FileNotFoundError):
+                except Exception:
                     continue
             
             # If WiFi kick commands failed, try iptables blocking as fallback
             if not kicked_successfully:
                 try:
                     # Block client MAC in iptables temporarily
-                    block_cmd = f'iptables -I FORWARD -m mac --mac-source {self.MAC_Address} -j DROP'
-                    subprocess.run(block_cmd.split(), capture_output=True, timeout=5)
-                    kicked_successfully = True
+                    block_cmd = ['iptables', '-I', 'FORWARD', '-m', 'mac', '--mac-source', str(self.MAC_Address), '-j', 'DROP']
+                    kicked_successfully = execute_safe_command(block_cmd)
                 except:
                     pass
             
@@ -243,8 +244,8 @@ class Rates(models.Model):
     Validity_Hours = models.IntegerField(verbose_name='Validity Period (Hours)', default=0, help_text='Additional hours for validity period. Combined with days above.')
 
     class Meta:
-        verbose_name = "Rate"
-        verbose_name_plural = "Rates"
+        verbose_name = "Coin Rate"
+        verbose_name_plural = "Coin Rates"
 
     def __str__(self):
         return 'Rate: ' + str(self.Denom)
@@ -339,10 +340,11 @@ class Settings(models.Model):
                 raise ValidationError('Coinslot Pin should not be the same as Light Pin.')
 
     class Meta:
-        verbose_name = 'Settings'
+        verbose_name = 'WIFI Settings'
+        verbose_name_plural = 'WIFI Settings'
 
     def __str__(self):
-        return 'Settings'
+        return 'WIFI Settings'
 
 class Network(models.Model):
     Edit = "Edit"
@@ -372,10 +374,11 @@ class Network(models.Model):
             
             # Method 1: Try to get default gateway interface and its IP
             try:
+                from app.utils.security import safe_subprocess_run
+                
                 # Get default gateway interface on Linux
-                result = subprocess.run(['ip', 'route', 'show', 'default'], 
-                                      capture_output=True, text=True, check=False)
-                if result.returncode == 0:
+                result = safe_subprocess_run(['ip', 'route', 'show', 'default'])
+                if result and result.returncode == 0:
                     # Parse output like: "default via 192.168.1.1 dev eth0"
                     for line in result.stdout.strip().split('\n'):
                         if 'default via' in line and 'dev' in line:
@@ -385,9 +388,8 @@ class Network(models.Model):
                                 if dev_index + 1 < len(parts):
                                     interface = parts[dev_index + 1]
                                     # Get IP of this interface
-                                    ip_result = subprocess.run(['ip', 'addr', 'show', interface], 
-                                                             capture_output=True, text=True, check=False)
-                                    if ip_result.returncode == 0:
+                                    ip_result = safe_subprocess_run(['ip', 'addr', 'show', interface])
+                                    if ip_result and ip_result.returncode == 0:
                                         import re
                                         # Look for inet IP/netmask
                                         match = re.search(r'inet (\d+\.\d+\.\d+\.\d+)', ip_result.stdout)
@@ -435,8 +437,8 @@ class Network(models.Model):
             if not wan_ip:
                 try:
                     # Windows: use ipconfig
-                    result = subprocess.run(['ipconfig'], capture_output=True, text=True, check=False)
-                    if result.returncode == 0:
+                    result = safe_subprocess_run(['ipconfig'])
+                    if result and result.returncode == 0:
                         import re
                         # Look for IPv4 Address that's not 127.x.x.x
                         matches = re.findall(r'IPv4 Address[.\s]*:\s*(\d+\.\d+\.\d+\.\d+)', result.stdout)
@@ -1492,8 +1494,10 @@ class VLANSettings(models.Model):
     )
     
     vlan_id = models.IntegerField(
+        null=True,
+        blank=True,
         default=22,
-        help_text='VLAN ID for VLAN mode (1-4094)',
+        help_text='VLAN ID for VLAN mode (1-4094). Leave blank for USB to LAN mode.',
         verbose_name='VLAN ID'
     )
     
@@ -1536,8 +1540,22 @@ class VLANSettings(models.Model):
     def __str__(self):
         return f'Network Mode: {self.get_network_mode_display()}'
     
+    def clean(self):
+        from django.core.exceptions import ValidationError
+        
+        # Validate VLAN ID based on network mode
+        if self.network_mode == 'vlan':
+            if not self.vlan_id:
+                raise ValidationError({'vlan_id': 'VLAN ID is required when using VLAN mode.'})
+            if self.vlan_id < 1 or self.vlan_id > 4094:
+                raise ValidationError({'vlan_id': 'VLAN ID must be between 1 and 4094.'})
+        elif self.network_mode == 'usb_to_lan':
+            # Clear VLAN ID for USB to LAN mode
+            self.vlan_id = None
+    
     def save(self, *args, **kwargs):
         self.pk = 1
+        self.full_clean()  # This will call clean() method
         super(VLANSettings, self).save(*args, **kwargs)
     
     @classmethod
@@ -1709,6 +1727,9 @@ class ZeroTierSettings(models.Model):
 
 class ZeroTierMonitoringData(models.Model):
     """Store ZeroTier monitoring data snapshots"""
+    
+    # Link to ZeroTier Settings (nullable for migration compatibility)
+    zerotier_settings = models.ForeignKey(ZeroTierSettings, on_delete=models.CASCADE, related_name='monitoring_data', verbose_name='ZeroTier Settings', null=True, blank=True)
     
     # System Information
     timestamp = models.DateTimeField(auto_now_add=True)
@@ -1960,3 +1981,254 @@ class PortPrioritization(models.Model):
                 created_count += 1
         
         return created_count
+
+
+class PortalSettings(models.Model):
+    """Main portal configuration settings"""
+    
+    # Basic Portal Information
+    portal_title = models.CharField(max_length=100, default='PISOWifi Portal', verbose_name='Portal Title')
+    portal_subtitle = models.CharField(max_length=200, blank=True, verbose_name='Portal Subtitle')
+    hotspot_name = models.CharField(max_length=255, verbose_name='Hotspot Name')
+    hotspot_address = models.CharField(max_length=255, blank=True, verbose_name='Hotspot Address')
+    
+    # Logo and Branding
+    logo = models.ImageField(upload_to='portal/logos/', blank=True, null=True, verbose_name='Portal Logo')
+    favicon = models.ImageField(upload_to='portal/favicons/', blank=True, null=True, verbose_name='Favicon')
+    
+    # Portal Colors and Theme
+    primary_color = models.CharField(max_length=7, default='#007bff', verbose_name='Primary Color', help_text='Hex color code (e.g., #007bff)')
+    secondary_color = models.CharField(max_length=7, default='#6c757d', verbose_name='Secondary Color', help_text='Hex color code (e.g., #6c757d)')
+    background_color = models.CharField(max_length=7, default='#ffffff', verbose_name='Background Color', help_text='Hex color code (e.g., #ffffff)')
+    text_color = models.CharField(max_length=7, default='#212529', verbose_name='Text Color', help_text='Hex color code (e.g., #212529)')
+    
+    # Portal Behavior
+    redirect_url = models.URLField(blank=True, verbose_name='Redirect URL', help_text='URL to redirect after successful connection')
+    show_timer = models.BooleanField(default=True, verbose_name='Show Timer', help_text='Display remaining time countdown')
+    show_data_usage = models.BooleanField(default=True, verbose_name='Show Data Usage', help_text='Display data usage information')
+    auto_refresh_interval = models.IntegerField(default=30, verbose_name='Auto Refresh Interval (seconds)', help_text='Page auto-refresh interval in seconds')
+    slot_timeout = models.IntegerField(default=300, verbose_name='Slot Timeout', help_text='Slot timeout in seconds. Time limit for coin insertion and login process.')
+    
+    # Portal Features
+    enable_vouchers = models.BooleanField(default=True, verbose_name='Enable Vouchers')
+    enable_pause_resume = models.BooleanField(default=True, verbose_name='Enable Pause/Resume')
+    pause_resume_min_time = models.DurationField(default=timezone.timedelta(minutes=0), null=True, blank=True, verbose_name='Minimum Time for Pause', help_text='Minimum remaining time required to enable pause button (HH:MM:SS format)')
+    enable_social_login = models.BooleanField(default=False, verbose_name='Enable Social Login')
+    
+    # Maintenance
+    maintenance_mode = models.BooleanField(default=False, verbose_name='Maintenance Mode')
+    maintenance_message = models.TextField(blank=True, verbose_name='Maintenance Message')
+    
+    # Timestamps
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        verbose_name = 'Portal Settings'
+        verbose_name_plural = 'Portal Settings'
+    
+    def __str__(self):
+        return 'Portal Settings'
+    
+    def save(self, *args, **kwargs):
+        # Ensure singleton
+        if not self.pk and PortalSettings.objects.exists():
+            raise ValidationError('Only one Portal Settings instance is allowed.')
+        return super().save(*args, **kwargs)
+
+
+class PortalBanner(models.Model):
+    """Portal banner management"""
+    
+    BANNER_TYPES = [
+        ('carousel', 'Carousel Banner'),
+        ('header', 'Header Banner'),
+        ('footer', 'Footer Banner'),
+        ('popup', 'Popup Banner'),
+    ]
+    
+    # Link to Portal Settings (nullable for migration compatibility)
+    portal_settings = models.ForeignKey(PortalSettings, on_delete=models.CASCADE, related_name='banners', verbose_name='Portal Settings', null=True, blank=True)
+    
+    name = models.CharField(max_length=100, verbose_name='Banner Name')
+    banner_type = models.CharField(max_length=20, choices=BANNER_TYPES, default='carousel', verbose_name='Banner Type')
+    image = models.ImageField(upload_to='portal/banners/', verbose_name='Banner Image')
+    alt_text = models.CharField(max_length=200, blank=True, verbose_name='Alt Text')
+    
+    # Banner Links
+    link_url = models.URLField(blank=True, verbose_name='Link URL', help_text='URL to redirect when banner is clicked')
+    open_in_new_tab = models.BooleanField(default=True, verbose_name='Open in New Tab')
+    
+    # Display Settings
+    is_active = models.BooleanField(default=True, verbose_name='Active')
+    display_order = models.IntegerField(default=0, verbose_name='Display Order')
+    
+    # Schedule Settings
+    start_date = models.DateTimeField(blank=True, null=True, verbose_name='Start Date')
+    end_date = models.DateTimeField(blank=True, null=True, verbose_name='End Date')
+    
+    # Banner Dimensions (for validation)
+    max_width = models.IntegerField(default=1200, verbose_name='Max Width (px)')
+    max_height = models.IntegerField(default=400, verbose_name='Max Height (px)')
+    
+    # Timestamps
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        verbose_name = 'Portal Banner'
+        verbose_name_plural = 'Portal Banners'
+        ordering = ['display_order', 'name']
+    
+    def __str__(self):
+        return f'{self.name} ({self.get_banner_type_display()})'
+    
+    def is_scheduled_active(self):
+        """Check if banner is active based on schedule"""
+        now = timezone.now()
+        if self.start_date and now < self.start_date:
+            return False
+        if self.end_date and now > self.end_date:
+            return False
+        return True
+
+
+class PortalAudio(models.Model):
+    """Portal audio file management"""
+    
+    AUDIO_TYPES = [
+        ('background', 'Background Music'),
+        ('coin_insert', 'Coin Insert Sound'),
+        ('coin_accepted', 'Coin Accepted Sound'),
+        ('connection_success', 'Connection Success Sound'),
+        ('connection_failed', 'Connection Failed Sound'),
+        ('time_warning', 'Time Warning Sound'),
+        ('disconnection', 'Disconnection Sound'),
+    ]
+    
+    # Link to Portal Settings (nullable for migration compatibility)
+    portal_settings = models.ForeignKey(PortalSettings, on_delete=models.CASCADE, related_name='audio_files', verbose_name='Portal Settings', null=True, blank=True)
+    
+    name = models.CharField(max_length=100, verbose_name='Audio Name')
+    audio_type = models.CharField(max_length=20, choices=AUDIO_TYPES, verbose_name='Audio Type')
+    audio_file = models.FileField(upload_to='portal/audio/', verbose_name='Audio File', help_text='Supported formats: MP3, WAV, OGG')
+    
+    # Audio Settings
+    is_active = models.BooleanField(default=True, verbose_name='Active')
+    volume = models.IntegerField(default=50, verbose_name='Volume (%)', help_text='Volume level (0-100)')
+    loop = models.BooleanField(default=False, verbose_name='Loop Audio', help_text='Loop audio continuously (for background music)')
+    
+    # Audio Properties
+    duration = models.DurationField(blank=True, null=True, verbose_name='Duration')
+    file_size = models.IntegerField(blank=True, null=True, verbose_name='File Size (bytes)')
+    
+    # Timestamps
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        verbose_name = 'Portal Audio'
+        verbose_name_plural = 'Portal Audio Files'
+        # unique_together = ['audio_type', 'is_active']  # Only one active audio per type
+    
+    def __str__(self):
+        return f'{self.name} ({self.get_audio_type_display()})'
+    
+    def clean(self):
+        # Validate file format
+        if self.audio_file:
+            valid_extensions = ['.mp3', '.wav', '.ogg']
+            file_extension = os.path.splitext(self.audio_file.name)[1].lower()
+            if file_extension not in valid_extensions:
+                raise ValidationError('Audio file must be MP3, WAV, or OGG format.')
+        
+        # Ensure only one active audio per type
+        if self.is_active:
+            existing = PortalAudio.objects.filter(audio_type=self.audio_type, is_active=True)
+            if self.pk:
+                existing = existing.exclude(pk=self.pk)
+            if existing.exists():
+                raise ValidationError(f'Only one active {self.get_audio_type_display()} is allowed.')
+    
+    def save(self, *args, **kwargs):
+        # Get file size and duration if not set
+        if self.audio_file and not self.file_size:
+            self.file_size = self.audio_file.size
+        
+        super().save(*args, **kwargs)
+
+
+class PortalText(models.Model):
+    """Portal customizable text and messages"""
+    
+    TEXT_TYPES = [
+        ('welcome_message', 'Welcome Message'),
+        ('instructions', 'Connection Instructions'),
+        ('terms_of_service', 'Terms of Service'),
+        ('privacy_policy', 'Privacy Policy'),
+        ('help_text', 'Help Text'),
+        ('contact_info', 'Contact Information'),
+        ('footer_text', 'Footer Text'),
+        ('error_messages', 'Error Messages'),
+        ('success_messages', 'Success Messages'),
+    ]
+    
+    name = models.CharField(max_length=100, verbose_name='Text Name')
+    text_type = models.CharField(max_length=20, choices=TEXT_TYPES, verbose_name='Text Type')
+    content = models.TextField(verbose_name='Content')
+    
+    # Text Formatting
+    allow_html = models.BooleanField(default=False, verbose_name='Allow HTML', help_text='Allow HTML tags in content')
+    font_size = models.CharField(max_length=10, blank=True, verbose_name='Font Size', help_text='CSS font size (e.g., 16px, 1.2em)')
+    font_weight = models.CharField(max_length=10, choices=[
+        ('normal', 'Normal'),
+        ('bold', 'Bold'),
+        ('lighter', 'Lighter'),
+    ], default='normal', verbose_name='Font Weight')
+    text_align = models.CharField(max_length=10, choices=[
+        ('left', 'Left'),
+        ('center', 'Center'),
+        ('right', 'Right'),
+        ('justify', 'Justify'),
+    ], default='left', verbose_name='Text Alignment')
+    
+    # Display Settings
+    is_active = models.BooleanField(default=True, verbose_name='Active')
+    display_order = models.IntegerField(default=0, verbose_name='Display Order')
+    
+    # Language Support
+    language = models.CharField(max_length=10, default='en', verbose_name='Language', help_text='Language code (e.g., en, es, fr)')
+    
+    # Timestamps
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        verbose_name = 'Portal Text'
+        verbose_name_plural = 'Portal Texts'
+        unique_together = ['text_type', 'language', 'is_active']  # Only one active text per type per language
+        ordering = ['text_type', 'display_order']
+    
+    def __str__(self):
+        return f'{self.name} ({self.get_text_type_display()})'
+    
+    def clean(self):
+        # Ensure only one active text per type per language
+        if self.is_active:
+            existing = PortalText.objects.filter(
+                text_type=self.text_type, 
+                language=self.language, 
+                is_active=True
+            )
+            if self.pk:
+                existing = existing.exclude(pk=self.pk)
+            if existing.exists():
+                raise ValidationError(f'Only one active {self.get_text_type_display()} per language is allowed.')
+    
+    def get_safe_content(self):
+        """Get content with HTML escaping if HTML is not allowed"""
+        if self.allow_html:
+            return self.content
+        else:
+            from django.utils.html import escape
+            return escape(self.content)

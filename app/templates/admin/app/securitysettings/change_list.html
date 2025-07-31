@@ -1,0 +1,60 @@
+{% extends "admin/change_list.html" %}
+{% load i18n admin_urls static admin_list %}
+
+{% block content_title %}{{ title }}{% endblock %}
+
+{% block extrahead %}
+    {{ block.super }}
+    <link rel="stylesheet" href="{% static 'vendors/fontawesome-free-5.1.0-web/css/all.css' %}">
+    <style>
+        .security-buttons {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-left: 5px;
+        }
+        .security-btn {
+            padding: 8px 16px;
+            border-radius: 4px;
+            text-decoration: none;
+            font-size: 14px;
+            font-weight: 500;
+            transition: all 0.2s ease;
+        }
+        .security-btn:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
+        .security-btn i {
+            margin-right: 5px;
+        }
+    </style>
+{% endblock %}
+
+{% block object-tools-items %}
+    {{ block.super }}
+    <div class="security-buttons">
+        <a href="{% url 'admin:app_trafficmonitor_changelist' %}" class="security-btn" style="background-color: #28a745; border-color: #28a745; color: white;">
+            <i class="fas fa-eye"></i>Traffic Monitor
+        </a>
+        <a href="{% url 'admin:app_connectiontracker_changelist' %}" class="security-btn" style="background-color: #17a2b8; border-color: #17a2b8; color: white;">
+            <i class="fas fa-route"></i>Connection Tracker
+        </a>
+        <a href="{% url 'admin:app_ttlfirewallrule_changelist' %}" class="security-btn" style="background-color: #dc3545; border-color: #dc3545; color: white;">
+            <i class="fas fa-fire"></i>TTL Firewall Rules
+        </a>
+        <a href="{% url 'admin:app_trafficanalysis_changelist' %}" class="security-btn" style="background-color: #6f42c1; border-color: #6f42c1; color: white;">
+            <i class="fas fa-chart-area"></i>Traffic Analysis
+        </a>
+        <a href="{% url 'admin:app_devicebehaviorprofile_changelist' %}" class="security-btn" style="background-color: #fd7e14; border-color: #fd7e14; color: white;">
+            <i class="fas fa-user-shield"></i>Device Behavior Profiles
+        </a>
+        <a href="{% url 'admin:app_networkintelligence_changelist' %}" class="security-btn" style="background-color: #20c997; border-color: #20c997; color: white;">
+            <i class="fas fa-brain"></i>Network Intelligence
+        </a>
+    </div>
+{% endblock %}
+
+{% block content %}
+    {{ block.super }}
+{% endblock %}

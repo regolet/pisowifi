@@ -4,20 +4,22 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PISOWifi Portal</title>
+    <title>{{ portal_title|default:"PISOWifi Portal" }}</title>
+    {% if favicon %}<link rel="icon" type="image/x-icon" href="{{ favicon }}">{% endif %}
     <!-- Use offline Bootstrap and FontAwesome -->
     <link rel="stylesheet" type="text/css" href="{% static 'css/bootstrap.min.css' %}">
     <link rel="stylesheet" type="text/css" href="{% static 'css/fontawesome.min.css' %}">
     <style>
         body {
-            background: linear-gradient(135deg, #007bff 0%, #0056b3 100%);
+            background: linear-gradient(135deg, {{ primary_color|default:"#007bff" }} 0%, {{ secondary_color|default:"#0056b3" }} 100%);
             min-height: 100vh;
             margin: 0;
             padding: 0;
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            color: {{ text_color|default:"#212529" }};
         }
         .content-wrapper {
-            background: white;
+            background: {{ background_color|default:"white" }};
             min-height: 100vh;
             width: 100%;
         }
@@ -57,7 +59,7 @@
         }
         .status-value {
             font-weight: 600;
-            color: #007bff;
+            color: {{ primary_color|default:"#007bff" }};
         }
         .btn-portal {
             width: calc(100% - 40px);
@@ -69,7 +71,7 @@
         }
         .wifi-icon {
             font-size: 3rem;
-            color: #007bff;
+            color: {{ primary_color|default:"#007bff" }};
             margin-bottom: 20px;
         }
         .blocked-message {
@@ -89,14 +91,28 @@
     <div class="content-wrapper">
         <div class="portal-header">
             <div class="banner-carousel" style="position: relative; width: 100%; height: 250px; margin-bottom: 0; overflow: hidden;">
+                {% if logo %}
+                <!-- Portal Logo -->
+                <div style="position: absolute; top: 10px; left: 10px; z-index: 10;">
+                    <img src="{{ logo }}" alt="Portal Logo" style="max-height: 50px; max-width: 150px; object-fit: contain;">
+                </div>
+                {% endif %}
+                
                 {% for image in banner_images %}
-                <img src="{% static 'background/1/' %}{{ image }}" alt="Banner {{ forloop.counter }}" class="carousel-slide {% if forloop.first %}active{% endif %}" 
-                     style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; opacity: {% if forloop.first %}1{% else %}0{% endif %}; transition: opacity 1s ease-in-out;" />
-                {% empty %}
-                <!-- Fallback image if no banner images found -->
-                <img src="{% static 'background/1/ml.jpg' %}" alt="Default Banner" class="carousel-slide active" 
-                     style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; opacity: 1; transition: opacity 1s ease-in-out;" />
+                <div class="carousel-slide {% if forloop.first %}active{% endif %}" 
+                     style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; opacity: {% if forloop.first %}1{% else %}0{% endif %}; transition: opacity 1s ease-in-out;"
+                     {% if image.link_url %}onclick="window.open('{{ image.link_url }}', '{% if image.open_in_new_tab %}_blank{% else %}_self{% endif %}')" style="cursor: pointer;"{% endif %}>
+                    <img src="{{ image.url }}" alt="{{ image.alt_text }}" style="width: 100%; height: 100%; object-fit: cover;" />
+                </div>
                 {% endfor %}
+                
+                <!-- Portal Title Overlay -->
+                {% if portal_title or portal_subtitle %}
+                <div style="position: absolute; bottom: 20px; left: 20px; right: 20px; z-index: 10; text-align: center;">
+                    {% if portal_title %}<h1 style="color: white; text-shadow: 2px 2px 4px rgba(0,0,0,0.8); margin: 0; font-size: 1.8rem;">{{ portal_title }}</h1>{% endif %}
+                    {% if portal_subtitle %}<p style="color: white; text-shadow: 1px 1px 2px rgba(0,0,0,0.8); margin: 5px 0 0 0; font-size: 1.1rem;">{{ portal_subtitle }}</p>{% endif %}
+                </div>
+                {% endif %}
                 
                 <!-- Carousel indicators (only show if more than 1 image) -->
                 {% if banner_images|length > 1 %}
@@ -109,7 +125,13 @@
             </div>
         </div>
 
-        {% if status == 'Blocked' %}
+        <!-- Maintenance Mode Check -->
+        {% if maintenance_mode %}
+        <div class="blocked-message">
+            <h4><i class="fas fa-tools me-2"></i>Maintenance Mode</h4>
+            <p>{{ maintenance_message|default:"The portal is currently under maintenance. Please try again later." }}</p>
+        </div>
+        {% elif status == 'Blocked' %}
         <div class="blocked-message">
             <h4><i class="fas fa-ban me-2"></i>Device Blocked</h4>
             <p>Your device has been blocked from accessing the network.</p>
@@ -135,34 +157,31 @@
             
             <!-- System Status Information -->
             <div class="mb-0">
-                <div class="row">
-                    <div class="col-6">
-                        <div class="d-flex justify-content-center align-items-center gap-2">
-                            <div class="status-label" style="font-size: 0.85rem;">
-                                <i class="fas fa-globe me-1"></i>Internet
-                            </div>
-                            <div>
-                                {% if internet_connected %}
-                                    <span class="badge bg-success" style="font-size: 0.75rem;"><i class="fas fa-check-circle me-1"></i>{{ internet_connected|yesno:"Online,Offline" }}</span>
-                                {% else %}
-                                    <span class="badge bg-danger" style="font-size: 0.75rem;"><i class="fas fa-times-circle me-1"></i>Offline</span>
-                                {% endif %}
-                            </div>
-                        </div>
+                <!-- Internet Status -->
+                <div class="d-flex justify-content-center align-items-center gap-2">
+                    <div class="status-label" style="font-size: 0.85rem;">
+                        <i class="fas fa-globe me-1"></i>Internet
                     </div>
-                    <div class="col-6">
-                        <div class="d-flex justify-content-center align-items-center gap-2">
-                            <div class="status-label" style="font-size: 0.85rem;">
-                                <i class="fas fa-pause me-1"></i>AutoPause
-                            </div>
-                            <div>
-                                {% if pause_resume_flg == 1 %}
-                                    <span class="badge bg-info" style="font-size: 0.75rem;"><i class="fas fa-check-circle me-1"></i>Enabled</span>
-                                {% else %}
-                                    <span class="badge bg-secondary" style="font-size: 0.75rem;"><i class="fas fa-times-circle me-1"></i>Disabled</span>
-                                {% endif %}
-                            </div>
-                        </div>
+                    <div>
+                        {% if internet_connected %}
+                            <span class="badge bg-success" style="font-size: 0.75rem;"><i class="fas fa-check-circle me-1"></i>{{ internet_connected|yesno:"Online,Offline" }}</span>
+                        {% else %}
+                            <span class="badge bg-danger" style="font-size: 0.75rem;"><i class="fas fa-times-circle me-1"></i>Offline</span>
+                        {% endif %}
+                    </div>
+                </div>
+                
+                <!-- AutoPause Status -->
+                <div class="d-flex justify-content-center align-items-center gap-2">
+                    <div class="status-label" style="font-size: 0.85rem;">
+                        <i class="fas fa-pause me-1"></i>AutoPause
+                    </div>
+                    <div>
+                        {% if pause_resume_flg == 1 %}
+                            <span class="badge bg-info" style="font-size: 0.75rem;"><i class="fas fa-check-circle me-1"></i>Enabled</span>
+                        {% else %}
+                            <span class="badge bg-secondary" style="font-size: 0.75rem;"><i class="fas fa-times-circle me-1"></i>Disabled</span>
+                        {% endif %}
                     </div>
                 </div>
             </div>
@@ -174,7 +193,7 @@
                       onclick="copyMacAddress()" 
                       title="Click to copy"
                       id="macAddress">
-                    MAC:{{ mac|upper }}||IP:{{ ip|default:"Unknown" }}
+                    MAC:{{ mac|upper }} || IP:<span id="compressedIP">{{ ip|default:"Unknown" }}</span>
                 </span>
             </div>
             
@@ -191,7 +210,7 @@
             </div>
             {% endif %}
             
-            {% if time_left > 0 %}
+            {% if time_left > 0 and show_timer %}
             <div class="mb-4">
                 <div class="status-label">
                     <i class="fas fa-clock me-2"></i>REMAINING TIME
@@ -259,21 +278,27 @@
                     <button class="btn btn-secondary btn-portal" disabled>
                         <i class="fas fa-coins me-2"></i>INSERT COIN (Offline)
                     </button>
+                    {% if enable_vouchers %}
                     <button class="btn btn-secondary btn-portal" disabled>
                         <i class="fas fa-ticket-alt me-2"></i>Use Voucher (Offline)
                     </button>
+                    {% endif %}
                 {% else %}
                     {% if status == 'Paused' %}
+                    {% if enable_pause_resume %}
                     <button class="btn btn-success btn-portal" onclick="resumeSession()">
                         <i class="fas fa-play me-2"></i>Resume Session
                     </button>
+                    {% endif %}
                     <button class="btn btn-primary btn-portal" onclick="insertCoin()">
                         <i class="fas fa-coins me-2"></i>INSERT COIN
                     </button>
                     {% elif status == 'Connected' %}
+                    {% if enable_pause_resume %}
                     <button class="btn btn-warning btn-portal" onclick="pauseSession()">
                         <i class="fas fa-pause me-2"></i>Pause Session
                     </button>
+                    {% endif %}
                     <button class="btn btn-primary btn-portal" onclick="insertCoin()">
                         <i class="fas fa-coins me-2"></i>EXTEND
                     </button>
@@ -281,9 +306,11 @@
                     <button class="btn btn-primary btn-portal" onclick="insertCoin()">
                         <i class="fas fa-coins me-2"></i>INSERT COIN
                     </button>
+                    {% if enable_vouchers %}
                     <button class="btn btn-success btn-portal" onclick="useVoucher()">
                         <i class="fas fa-ticket-alt me-2"></i>Use Voucher
                     </button>
+                    {% endif %}
                     {% endif %}
                 {% endif %}
             {% endif %}
@@ -295,13 +322,45 @@
         </div>
         {% endif %}
 
+        <!-- Portal Text Content -->
+        {% if portal_texts.welcome_message %}
+        <div class="text-center mt-3 p-3 bg-light rounded">
+            <div style="{% if portal_texts.welcome_message.font_size %}font-size: {{ portal_texts.welcome_message.font_size }};{% endif %} 
+                        {% if portal_texts.welcome_message.font_weight %}font-weight: {{ portal_texts.welcome_message.font_weight }};{% endif %}
+                        {% if portal_texts.welcome_message.text_align %}text-align: {{ portal_texts.welcome_message.text_align }};{% endif %}">
+                {{ portal_texts.welcome_message.content|safe }}
+            </div>
+        </div>
+        {% endif %}
+        
+        {% if portal_texts.contact_info %}
+        <div class="text-center mt-3">
+            <small class="text-muted" style="{% if portal_texts.contact_info.font_size %}font-size: {{ portal_texts.contact_info.font_size }};{% endif %}">
+                <i class="fas fa-info-circle me-1"></i>
+                {{ portal_texts.contact_info.content|safe }}
+            </small>
+        </div>
+        {% else %}
         <div class="text-center mt-3">
             <small class="text-muted">
                 <i class="fas fa-shield-alt me-1"></i>
                 Secure Connection Protected
             </small>
         </div>
+        {% endif %}
     </div>
+
+    <!-- Audio Elements for Portal Sounds -->
+    {% if portal_audio %}
+    <div id="portalAudio" style="display: none;">
+        {% for audio_type, audio_data in portal_audio.items %}
+        <audio id="audio_{{ audio_type }}" preload="auto" {% if audio_data.loop %}loop{% endif %}>
+            <source src="{{ audio_data.url }}" type="audio/mpeg">
+            Your browser does not support the audio element.
+        </audio>
+        {% endfor %}
+    </div>
+    {% endif %}
 
     <!-- Use offline Bootstrap JS (includes all modal functionality) -->
     <script src="{% static 'js/bootstrap.bundle.min.js' %}"></script>
@@ -363,14 +422,6 @@
                         <i class="fas fa-check-circle me-2"></i>
                         Coin detected! Processing payment...
                     </div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">
-                        <i class="fas fa-times me-2"></i>Cancel
-                    </button>
-                    <button type="button" class="btn btn-primary" onclick="refreshCoinStatus()">
-                        <i class="fas fa-sync-alt me-2"></i>Check Status
-                    </button>
                 </div>
             </div>
         </div>
@@ -539,6 +590,155 @@
     </style>
 
     <script>
+        // Portal Audio System
+        const PortalAudio = {
+            audioElements: {},
+            
+            init: function() {
+                // console.log('Initializing Portal Audio System...');
+                
+                // Initialize audio elements
+                {% if portal_audio %}
+                {% for audio_type, audio_data in portal_audio.items %}
+                // console.log('Loading audio: {{ audio_type }} from {{ audio_data.url }}');
+                this.audioElements['{{ audio_type }}'] = document.getElementById('audio_{{ audio_type }}');
+                if (this.audioElements['{{ audio_type }}']) {
+                    this.audioElements['{{ audio_type }}'].volume = {{ audio_data.volume|default:50 }} / 100;
+                    // console.log('Audio element {{ audio_type }} loaded successfully with volume {{ audio_data.volume|default:50 }}%');
+                } else {
+                    console.error('Audio element audio_{{ audio_type }} not found in DOM');
+                }
+                {% endfor %}
+                {% else %}
+                // console.log('No portal audio data available');
+                {% endif %}
+                
+                // Don't auto-play background music on page load
+                // console.log('Audio system initialized - background music will play when INSERT COIN is clicked');
+            },
+            
+            play: function(audioType) {
+                try {
+                    if (this.audioElements[audioType]) {
+                        // Reset audio to beginning
+                        this.audioElements[audioType].currentTime = 0;
+                        
+                        // Play audio with user interaction handling
+                        const playPromise = this.audioElements[audioType].play();
+                        if (playPromise !== undefined) {
+                            playPromise.catch(error => {
+                                // console.log('Audio play failed (user interaction required):', error);
+                            });
+                        }
+                    }
+                } catch (error) {
+                    // console.log('Error playing audio:', error);
+                }
+            },
+            
+            stop: function(audioType) {
+                try {
+                    if (this.audioElements[audioType]) {
+                        this.audioElements[audioType].pause();
+                        this.audioElements[audioType].currentTime = 0;
+                    }
+                } catch (error) {
+                    // console.log('Error stopping audio:', error);
+                }
+            },
+            
+            playBackground: function() {
+                // Auto-play background music if available
+                if (this.audioElements['background']) {
+                    // Reset to beginning and try to play
+                    this.audioElements['background'].currentTime = 0;
+                    
+                    const playPromise = this.audioElements['background'].play();
+                    if (playPromise !== undefined) {
+                        playPromise.then(() => {
+                            // console.log('Background music started successfully');
+                        }).catch(error => {
+                            // Auto-play was blocked - common in modern browsers
+                            // console.log('Auto-play blocked by browser policy, waiting for user interaction:', error.name);
+                            
+                            // Only set up interaction listeners if not already playing
+                            if (this.audioElements['background'].paused) {
+                                this.setupAutoPlayOnInteraction();
+                            }
+                        });
+                    }
+                } else {
+                    // console.log('No background audio element found');
+                }
+            },
+            
+            setupAutoPlayOnInteraction: function() {
+                // Set up one-time listener for user interaction to start background music
+                const startBackground = () => {
+                    if (this.audioElements['background']) {
+                        this.play('background');
+                        // console.log('Background music started after user interaction');
+                    }
+                    // Remove listeners after first interaction
+                    document.removeEventListener('click', startBackground);
+                    document.removeEventListener('touchstart', startBackground);
+                    document.removeEventListener('keydown', startBackground);
+                };
+                
+                document.addEventListener('click', startBackground, { once: true });
+                document.addEventListener('touchstart', startBackground, { once: true });
+                document.addEventListener('keydown', startBackground, { once: true });
+            }
+        };
+        
+        // Initialize audio system when page loads (but don't auto-play music)
+        document.addEventListener('DOMContentLoaded', function() {
+            PortalAudio.init();
+            
+            // Compress IP address display
+            compressIPDisplay();
+        });
+        
+        // Function to compress IP address display
+        function compressIPDisplay() {
+            const ipElement = document.getElementById('compressedIP');
+            if (ipElement) {
+                const fullIP = ipElement.textContent;
+                const compressedIP = getCompressedIP(fullIP);
+                
+                if (compressedIP !== fullIP) {
+                    ipElement.textContent = compressedIP;
+                    ipElement.title = `Full IP: ${fullIP}`;
+                }
+            }
+        }
+        
+        // Function to get compressed IP
+        function getCompressedIP(ip) {
+            if (!ip || ip === 'Unknown') return ip;
+            
+            // For common local network patterns, show compressed version
+            if (ip.startsWith('192.168.')) {
+                // 192.168.1.100 -> ...1.100
+                const parts = ip.split('.');
+                return `...${parts[2]}.${parts[3]}`;
+            } else if (ip.startsWith('10.')) {
+                // 10.0.1.100 -> ...1.100
+                const parts = ip.split('.');
+                return `...${parts[2]}.${parts[3]}`;
+            } else if (ip.startsWith('172.')) {
+                // 172.16.1.100 -> ...1.100
+                const parts = ip.split('.');
+                return `...${parts[2]}.${parts[3]}`;
+            } else if (ip === '127.0.0.1') {
+                // Localhost -> Local
+                return 'Local';
+            }
+            
+            // For other IPs, keep full display
+            return ip;
+        }
+        
         // Banner Carousel Functionality
         let currentSlide = 0;
         const slides = document.querySelectorAll('.carousel-slide');
@@ -595,6 +795,10 @@
         let coinCheckInterval = null;
 
         function insertCoin() {
+            // Start background music when INSERT COIN is clicked
+            PortalAudio.playBackground();
+            // console.log('Background music started - INSERT COIN clicked');
+            
             // First check if coin slot is available and claim it
             fetch('/app/slot?claim=true', {
                 method: 'GET',
@@ -614,7 +818,7 @@
                 // Initialize coin tracking
                 document.getElementById('totalCoins').textContent = '₱' + (data.Total_Coins || 0).toFixed(2);
                 const availableMinutes = data.Available_Time || 0;
-                document.getElementById('availableTime').textContent = formatTime(availableMinutes);
+                document.getElementById('availableTime').textContent = formatTimeMinutes(availableMinutes);
                 
                 // Reset countdown to full time - portal is the authority
                 timeLeft = {{ slot_timeout|default:60 }};
@@ -655,7 +859,7 @@
                 
                 // Immediately update database with initial countdown state
                 setTimeout(() => {
-                    console.log('Initial database update with timeLeft:', timeLeft);
+                    // console.log('Initial database update with timeLeft:', timeLeft);
                     updateSlotDatabase();
                 }, 1000);
                 
@@ -689,7 +893,7 @@
                 
                 // Update database every 10 seconds with portal countdown
                 if (timeLeft % 10 === 0 || timeLeft === {{ slot_timeout|default:60 }} - 1) {
-                    console.log('Updating database with timeLeft:', timeLeft);
+                    // console.log('Updating database with timeLeft:', timeLeft);
                     updateSlotDatabase();
                 }
                 
@@ -718,7 +922,7 @@
 
         function updateSlotDatabase(action = 'update') {
             // Update database with portal countdown status
-            console.log('updateSlotDatabase called with action:', action, 'timeLeft:', timeLeft);
+            // console.log('updateSlotDatabase called with action:', action, 'timeLeft:', timeLeft);
             
             fetch('/app/slot/update', {
                 method: 'POST',
@@ -733,10 +937,10 @@
             })
             .then(response => response.json())
             .then(data => {
-                console.log('Database update response:', data);
+                // console.log('Database update response:', data);
             })
             .catch(error => {
-                console.log('Error updating slot database:', error);
+                // console.log('Error updating slot database:', error);
             });
         }
 
@@ -748,6 +952,9 @@
         }
 
         function checkCoinStatus() {
+            // Track current coin amount for sound detection
+            const currentCoins = parseFloat(document.getElementById('totalCoins').textContent.replace('₱', '')) || 0;
+            
             // Make AJAX request to check if coin was inserted
             fetch('/app/slot', {
                 method: 'GET',
@@ -780,10 +987,18 @@
                 
                 // Portal is the timer authority - no sync needed
                 
-                // Update coin display
+                // Update coin display and check for new coins
                 if (data.Total_Coins && data.Total_Coins > 0) {
-                    document.getElementById('totalCoins').textContent = '₱' + data.Total_Coins.toFixed(2);
-                    document.getElementById('availableTime').textContent = formatTime(data.Available_Time);
+                    const newCoinAmount = data.Total_Coins;
+                    
+                    // Play coin sound only if coin amount increased (actual pulse detected)
+                    if (newCoinAmount > currentCoins) {
+                        // console.log('Coin pulse detected! Playing coin sound...');
+                        PortalAudio.play('coin_accepted');
+                    }
+                    
+                    document.getElementById('totalCoins').textContent = '₱' + newCoinAmount.toFixed(2);
+                    document.getElementById('availableTime').textContent = formatTimeMinutes(data.Available_Time);
                 }
                 
                 if (data.Total_Coins > 0) {
@@ -802,11 +1017,11 @@
                 }
             })
             .catch(error => {
-                console.log('Coin check error:', error);
+                // console.log('Coin check error:', error);
             });
         }
 
-        function formatTime(minutes) {
+        function formatTimeMinutes(minutes) {
             if (minutes >= 60) {
                 const hours = Math.floor(minutes / 60);
                 const remainingMinutes = minutes % 60;
@@ -848,7 +1063,12 @@
             connectBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>CONNECTING...';
             
             // Make AJAX request to start browsing session
-            fetch('/app/browse', {
+            const params = new URLSearchParams({
+                ip: '{{ ip }}',
+                mac: '{{ mac }}'
+            });
+            
+            fetch(`/app/browse?${params}`, {
                 method: 'GET',
                 headers: {
                     'X-Requested-With': 'XMLHttpRequest',
@@ -858,6 +1078,13 @@
             .then(response => response.json())
             .then(data => {
                 if (data.status_code === 200) {
+                    // Stop background music on successful connection
+                    PortalAudio.stop('background');
+                    // console.log('Background music stopped - client connected successfully');
+                    
+                    // Play connection success sound
+                    PortalAudio.play('connection_success');
+                    
                     // Session started successfully
                     document.getElementById('coinStatus').innerHTML = `
                         <div class="alert alert-success">
@@ -872,6 +1099,9 @@
                         location.reload();
                     }, 2000);
                 } else {
+                    // Play connection failed sound
+                    PortalAudio.play('connection_failed');
+                    
                     // Session failed
                     document.getElementById('coinStatus').innerHTML = `
                         <div class="alert alert-danger">
@@ -885,7 +1115,7 @@
                 }
             })
             .catch(error => {
-                console.log('Session start error:', error);
+                // console.log('Session start error:', error);
                 document.getElementById('coinStatus').innerHTML = `
                     <div class="alert alert-danger">
                         <i class="fas fa-exclamation-triangle me-2"></i>
@@ -949,7 +1179,10 @@
             .then(response => response.json())
             .then(data => {
                 if (data.code === 200) {
-                    // Success
+                    // Success - stop background music since client will be connected
+                    PortalAudio.stop('background');
+                    // console.log('Background music stopped - voucher redeemed successfully');
+                    
                     voucherStatus.innerHTML = `
                         <div class="alert alert-success">
                             <i class="fas fa-check-circle me-2"></i>
@@ -1005,6 +1238,10 @@
         }
         
         function pauseSession() {
+            // Stop background music since we're managing an active session
+            PortalAudio.stop('background');
+            // console.log('Background music stopped - session paused');
+            
             // Make AJAX request to pause the session
             const params = new URLSearchParams({
                 ip: '{{ ip }}',
@@ -1028,6 +1265,10 @@
         }
         
         function resumeSession() {
+            // Stop background music since we're resuming an active session
+            PortalAudio.stop('background');
+            // console.log('Background music stopped - session resumed');
+            
             // Make AJAX request to resume the session
             const params = new URLSearchParams({
                 ip: '{{ ip }}',
@@ -1055,12 +1296,24 @@
             updateSlotDatabase('expired');
         }
 
-        // Clean up intervals when modal is closed
+        // Clean up intervals when coin modal is closed
         document.getElementById('insertCoinModal').addEventListener('hidden.bs.modal', function () {
             if (countdownTimer) clearInterval(countdownTimer);
             if (coinCheckInterval) clearInterval(coinCheckInterval);
+            
+            // Stop background music when modal is closed
+            PortalAudio.stop('background');
+            // console.log('Background music stopped - coin modal closed');
+            
             // Notify database that portal was manually closed
             releaseCoinSlot();
+        });
+        
+        // Stop background music when voucher modal is closed
+        document.getElementById('voucherModal').addEventListener('hidden.bs.modal', function () {
+            // Stop background music when voucher modal is closed
+            PortalAudio.stop('background');
+            // console.log('Background music stopped - voucher modal closed');
         });
 
         // Load existing credits on page load
@@ -1070,13 +1323,13 @@
             // Check if creditSection exists (not available in blocked state)
             const creditSection = document.getElementById('creditSection');
             if (!creditSection) {
-                console.log('Credit section not available (blocked state or other)');
+                // console.log('Credit section not available (blocked state or other)');
                 return;
             }
             
             // Skip if MAC is null or default
             if (!mac || mac === '00:00:00:00:00:00') {
-                console.log('Invalid MAC address, skipping credit check');
+                // console.log('Invalid MAC address, skipping credit check');
                 creditSection.style.display = 'none';
                 return;
             }
@@ -1094,10 +1347,10 @@
                 return response.json();
             })
             .then(data => {
-                console.log('Credit data received:', data);
+                // console.log('Credit data received:', data);
                 
                 if (data.Error) {
-                    console.log('Server error:', data.Error);
+                    // console.log('Server error:', data.Error);
                 }
                 
                 if (data.Total_Coins && data.Total_Coins > 0) {
@@ -1114,15 +1367,15 @@
                         creditTime.textContent = minutes + ' min';
                     }
                     
-                    console.log('Credits loaded: ₱' + data.Total_Coins + ', ' + Math.floor(data.Total_Time / 60) + ' minutes');
+                    // console.log('Credits loaded: ₱' + data.Total_Coins + ', ' + Math.floor(data.Total_Time / 60) + ' minutes');
                 } else {
                     // Hide credit section if no credits  
                     creditSection.style.display = 'none';
-                    console.log('No credits found for this client');
+                    // console.log('No credits found for this client');
                 }
             })
             .catch(error => {
-                console.log('Error loading credits:', error);
+                // console.log('Error loading credits:', error);
                 creditSection.style.display = 'none';
             });
         }
@@ -1140,7 +1393,7 @@
                 navigator.clipboard.writeText(macText).then(function() {
                     showCopyFeedback('MAC address copied to clipboard!');
                 }).catch(function(err) {
-                    console.log('Clipboard copy failed:', err);
+                    // console.log('Clipboard copy failed:', err);
                     fallbackCopyTextToClipboard(macText);
                 });
             } else {
@@ -1168,7 +1421,7 @@
                     showCopyFeedback('Copy failed. Please select and copy manually.', 'error');
                 }
             } catch (err) {
-                console.log('Fallback copy failed:', err);
+                // console.log('Fallback copy failed:', err);
                 showCopyFeedback('Copy not supported. Please select and copy manually.', 'error');
             }
             
@@ -1189,7 +1442,7 @@
             }
             
             // Show message in console and as a brief visual feedback
-            console.log(message);
+            // console.log(message);
             
             // Reset after 1.5 seconds
             setTimeout(function() {
@@ -1208,7 +1461,7 @@
                 navigator.clipboard.writeText(expiryText).then(function() {
                     showExpiryFeedback('Expiry date copied to clipboard!');
                 }).catch(function(err) {
-                    console.log('Clipboard copy failed:', err);
+                    // console.log('Clipboard copy failed:', err);
                     fallbackCopyExpiryToClipboard(expiryText);
                 });
             } else {
@@ -1235,7 +1488,7 @@
                     showExpiryFeedback('Copy failed. Please select and copy manually.', 'error');
                 }
             } catch (err) {
-                console.log('Fallback copy failed:', err);
+                // console.log('Fallback copy failed:', err);
                 showExpiryFeedback('Copy not supported. Please select and copy manually.', 'error');
             }
             
@@ -1259,7 +1512,7 @@
             }
             
             // Show message in console
-            console.log(message);
+            // console.log(message);
             
             // Reset after 1.5 seconds
             setTimeout(function() {
@@ -1268,12 +1521,12 @@
             }, 1500);
         }
 
-        // Auto refresh every 30 seconds to update status (only if modal is not open)
+        // Auto refresh to update status (only if modal is not open)
         setInterval(function() {
             if (!document.getElementById('insertCoinModal').classList.contains('show')) {
                 location.reload();
             }
-        }, 30000);
+        }, {{ auto_refresh_interval|default:30 }}000);
         
         // Autopause functionality (if enabled in settings)
         {% if pause_resume_flg == 1 %}
@@ -1291,11 +1544,11 @@
                 
                 if (!currentOnlineStatus && '{{ status }}' === 'Connected') {
                     // Client went offline while connected - auto pause
-                    console.log('Client went offline - auto pausing...');
+                    // console.log('Client went offline - auto pausing...');
                     autoPauseSession();
                 } else if (currentOnlineStatus && '{{ status }}' === 'Paused') {
                     // Client came back online while paused - auto resume
-                    console.log('Client came back online - auto resuming...');
+                    // console.log('Client came back online - auto resuming...');
                     autoResumeSession();
                 }
                 
@@ -1325,7 +1578,7 @@
             .then(response => response.json())
             .then(data => {
                 if (data.status_code === 200) {
-                    console.log('Session auto-paused due to connectivity loss');
+                    // console.log('Session auto-paused due to connectivity loss');
                     // Don't reload immediately, wait for connection to restore
                 }
             })
@@ -1351,7 +1604,7 @@
             .then(response => response.json())
             .then(data => {
                 if (data.status_code === 200) {
-                    console.log('Session auto-resumed after connectivity restored');
+                    // console.log('Session auto-resumed after connectivity restored');
                     location.reload();
                 }
             })
@@ -1392,7 +1645,7 @@
                 }
             } else if (inactiveTime >= inactiveTimeoutMinutes && '{{ status }}' !== 'Disconnected') {
                 // Force disconnect after timeout
-                console.log('Client inactive for too long, forcing disconnect...');
+                // console.log('Client inactive for too long, forcing disconnect...');
                 forceDisconnectDueToInactivity();
             }
         }

@@ -759,8 +759,8 @@ class CoinSlotAdmin(admin.ModelAdmin):
         if obj.Last_Updated:
             from django.utils import timezone
             from datetime import timedelta
-            settings = models.Settings.objects.get(pk=1)
-            timeout = settings.Slot_Timeout
+            portal_settings = models.PortalSettings.objects.first()
+            timeout = portal_settings.slot_timeout if portal_settings else 300
             time_diff = timezone.now() - obj.Last_Updated
             if time_diff.total_seconds() > timeout:
                 return "Expired"
@@ -776,8 +776,8 @@ class CoinSlotAdmin(admin.ModelAdmin):
         
         from django.utils import timezone
         from datetime import timedelta
-        settings = models.Settings.objects.get(pk=1)
-        timeout = settings.Slot_Timeout
+        portal_settings = models.PortalSettings.objects.first()
+        timeout = portal_settings.slot_timeout if portal_settings else 300
         time_diff = timezone.now() - obj.Last_Updated
         remaining = timeout - time_diff.total_seconds()
         
@@ -998,16 +998,53 @@ class SalesReportAdmin(admin.ModelAdmin):
 
 class SettingsAdmin(Singleton, admin.ModelAdmin):
     form = forms.SettingsForm
-    list_display = ('Hotspot_Name', 'Hotspot_Address', 'Slot_Timeout', 'Rate_Type', 'Base_Value', 'Inactive_Timeout', 'Default_Block_Duration', 'Enable_Permanent_Block', 'Coinslot_Pin', 'Light_Pin')
+    list_display = ('rate_display', 'inactive_timeout_display', 'security_display', 'hardware_display')
     
-    def background_preview(self, obj):
-        return obj.background_preview
-
-    background_preview.short_description = 'Background Preview'
-    background_preview.allow_tags = True
+    def rate_display(self, obj):
+        """Display rate configuration"""
+        from django.utils.html import format_html
+        rate_type = obj.Rate_Type.upper() if obj.Rate_Type else 'MANUAL'
+        base_value = f" ({obj.Base_Value})" if obj.Rate_Type == 'auto' and obj.Base_Value else ""
+        return format_html(
+            '<div><strong style="color: #1976d2;">{}</strong>{}</div>',
+            rate_type, base_value
+        )
+    rate_display.short_description = 'Rate System'
+    
+    def inactive_timeout_display(self, obj):
+        """Display inactive timeout"""
+        from django.utils.html import format_html
+        return format_html(
+            '<span style="background: #fff3e0; color: #f57c00; padding: 2px 6px; border-radius: 3px; font-weight: bold;">{} min</span>',
+            obj.Inactive_Timeout
+        )
+    inactive_timeout_display.short_description = 'Session Timeout'
+    
+    def security_display(self, obj):
+        """Display security settings"""
+        from django.utils.html import format_html
+        block_duration = f"{obj.Default_Block_Duration}".replace(':', 'h ').replace(':00', 'm')
+        permanent = "✓" if obj.Enable_Permanent_Block else "✗"
+        return format_html(
+            '<div><strong>Block:</strong> {}<br><strong>Permanent:</strong> {}</div>',
+            block_duration, permanent
+        )
+    security_display.short_description = 'Security Settings'
+    
+    def hardware_display(self, obj):
+        """Display hardware configuration"""
+        from django.utils.html import format_html
+        return format_html(
+            '<div><strong>Coin Pin:</strong> GPIO {}<br><strong>Light Pin:</strong> GPIO {}</div>',
+            obj.Coinslot_Pin, obj.Light_Pin
+        )
+    hardware_display.short_description = 'Hardware Pins'
 
     def changelist_view(self, request, extra_context=None):
-        extra_context = {'title': 'Wifi Settings'}
+        extra_context = {
+            'title': 'WiFi Settings - Network & Hardware Configuration',
+            'subtitle': 'Configure WiFi rates, timeouts, security, and hardware settings'
+        }
         return super(SettingsAdmin, self).changelist_view(request, extra_context=extra_context)
 
     def has_add_permission(self, *args, **kwargs):
@@ -1024,7 +1061,7 @@ class SettingsAdmin(Singleton, admin.ModelAdmin):
         pass
 
     def save_model(self, request, obj, form, change):
-        messages.add_message(request, messages.INFO, 'Wifi Settings updated successfully.')
+        messages.add_message(request, messages.INFO, 'WiFi Settings updated successfully.')
         super(SettingsAdmin, self).save_model(request, obj, form, change)
 
 
@@ -1152,8 +1189,59 @@ class RatesAdmin(admin.ModelAdmin):
             'fields': ('Validity_Days', 'Validity_Hours'),
             'description': 'Set how long purchased time remains valid. Leave both as 0 for no expiration.'
         }),
+        ('Coin System Status', {
+            'fields': ('coin_slots_status', 'coin_queue_status'),
+            'classes': ('collapse',),
+            'description': 'Current status of coin slots and queue. Use the buttons above to manage coin slots and queue.'
+        }),
     )
     
+    readonly_fields = ('coin_slots_status', 'coin_queue_status')
+    
+    def coin_slots_status(self, obj):
+        """Display current coin slots status"""
+        from django.utils.html import format_html
+        try:
+            coin_slots = models.CoinSlot.objects.all()
+            total_slots = coin_slots.count()
+            occupied_slots = coin_slots.filter(Client__isnull=False).count()
+            available_slots = total_slots - occupied_slots
+            
+            return format_html(
+                '<div style="background: #f8f9fa; padding: 10px; border-radius: 5px;">'
+                '<strong>Coin Slots Overview:</strong><br>'
+                'Total Slots: <span style="color: #007bff; font-weight: bold;">{}</span><br>'
+                'Available: <span style="color: #28a745; font-weight: bold;">{}</span><br>'
+                'Occupied: <span style="color: #dc3545; font-weight: bold;">{}</span><br>'
+                '<a href="/admin/app/coinslot/" style="color: #007bff; text-decoration: none;">→ Manage Coin Slots</a>'
+                '</div>',
+                total_slots, available_slots, occupied_slots
+            )
+        except Exception as e:
+            return format_html('<span style="color: #dc3545;">Error loading coin slots status</span>')
+    coin_slots_status.short_description = 'Coin Slots Status'
+    
+    def coin_queue_status(self, obj):
+        """Display current coin queue status"""
+        from django.utils.html import format_html
+        try:
+            coin_queue = models.CoinQueue.objects.all()
+            total_queued = coin_queue.count()
+            total_coins = sum(queue.Total_Coins or 0 for queue in coin_queue)
+            
+            return format_html(
+                '<div style="background: #f8f9fa; padding: 10px; border-radius: 5px;">'
+                '<strong>Coin Queue Overview:</strong><br>'
+                'Queued Clients: <span style="color: #007bff; font-weight: bold;">{}</span><br>'
+                'Total Coins: <span style="color: #ffc107; font-weight: bold;">{}</span><br>'
+                '<a href="/admin/app/coinqueue/" style="color: #007bff; text-decoration: none;">→ Manage Coin Queue</a>'
+                '</div>',
+                total_queued, total_coins
+            )
+        except Exception as e:
+            return format_html('<span style="color: #dc3545;">Error loading coin queue status</span>')
+    coin_queue_status.short_description = 'Coin Queue Status'
+
     @admin.display(description='Validity Period')
     def validity_display(self, obj):
         """Display validity period in list view"""
@@ -1683,7 +1771,140 @@ class SecuritySettingsAdmin(Singleton, admin.ModelAdmin):
             'fields': ('Enable_Device_Blocking', 'Block_Duration'),
             'description': 'Complete device blocking as last resort (use TTL modification instead)'
         }),
+        ('Security Monitoring Status', {
+            'fields': ('traffic_monitor_status', 'connection_tracker_status', 'ttl_firewall_status', 'traffic_analysis_status', 'device_behavior_status', 'network_intelligence_status'),
+            'classes': ('collapse',),
+            'description': 'Current status of security monitoring systems. Use the buttons above to manage each security feature.'
+        }),
     )
+    
+    readonly_fields = ('traffic_monitor_status', 'connection_tracker_status', 'ttl_firewall_status', 'traffic_analysis_status', 'device_behavior_status', 'network_intelligence_status')
+
+    def traffic_monitor_status(self, obj):
+        """Display traffic monitor status"""
+        from django.utils.html import format_html
+        try:
+            traffic_logs = models.TrafficMonitor.objects.all()
+            total_logs = traffic_logs.count()
+            recent_logs = traffic_logs.filter(Timestamp__gte=timezone.now() - timezone.timedelta(hours=24)).count()
+            
+            return format_html(
+                '<div style="background: #f8f9fa; padding: 10px; border-radius: 5px;">'
+                '<strong>Traffic Monitor:</strong><br>'
+                'Total Logs: <span style="color: #007bff; font-weight: bold;">{}</span><br>'
+                'Last 24h: <span style="color: #28a745; font-weight: bold;">{}</span><br>'
+                '<a href="/admin/app/trafficmonitor/" style="color: #007bff; text-decoration: none;">→ View Traffic Logs</a>'
+                '</div>',
+                total_logs, recent_logs
+            )
+        except Exception as e:
+            return format_html('<span style="color: #dc3545;">Error loading traffic monitor status</span>')
+    traffic_monitor_status.short_description = 'Traffic Monitor'
+    
+    def connection_tracker_status(self, obj):
+        """Display connection tracker status"""
+        from django.utils.html import format_html
+        try:
+            connections = models.ConnectionTracker.objects.all()
+            total_connections = connections.count()
+            active_connections = connections.filter(Is_Active=True).count()
+            
+            return format_html(
+                '<div style="background: #f8f9fa; padding: 10px; border-radius: 5px;">'
+                '<strong>Connection Tracker:</strong><br>'
+                'Total Connections: <span style="color: #007bff; font-weight: bold;">{}</span><br>'
+                'Active: <span style="color: #28a745; font-weight: bold;">{}</span><br>'
+                '<a href="/admin/app/connectiontracker/" style="color: #007bff; text-decoration: none;">→ View Connections</a>'
+                '</div>',
+                total_connections, active_connections
+            )
+        except Exception as e:
+            return format_html('<span style="color: #dc3545;">Error loading connection tracker status</span>')
+    connection_tracker_status.short_description = 'Connection Tracker'
+    
+    def ttl_firewall_status(self, obj):
+        """Display TTL firewall rules status"""
+        from django.utils.html import format_html
+        try:
+            rules = models.TTLFirewallRule.objects.all()
+            total_rules = rules.count()
+            active_rules = rules.filter(Rule_Status='active').count()
+            
+            return format_html(
+                '<div style="background: #f8f9fa; padding: 10px; border-radius: 5px;">'
+                '<strong>TTL Firewall Rules:</strong><br>'
+                'Total Rules: <span style="color: #007bff; font-weight: bold;">{}</span><br>'
+                'Active: <span style="color: #28a745; font-weight: bold;">{}</span><br>'
+                '<a href="/admin/app/ttlfirewallrule/" style="color: #007bff; text-decoration: none;">→ Manage Rules</a>'
+                '</div>',
+                total_rules, active_rules
+            )
+        except Exception as e:
+            return format_html('<span style="color: #dc3545;">Error loading TTL firewall status</span>')
+    ttl_firewall_status.short_description = 'TTL Firewall Rules'
+    
+    def traffic_analysis_status(self, obj):
+        """Display traffic analysis status"""
+        from django.utils.html import format_html
+        try:
+            analyses = models.TrafficAnalysis.objects.all()
+            total_analyses = analyses.count()
+            recent_analyses = analyses.filter(Timestamp__gte=timezone.now() - timezone.timedelta(hours=24)).count()
+            
+            return format_html(
+                '<div style="background: #f8f9fa; padding: 10px; border-radius: 5px;">'
+                '<strong>Traffic Analysis:</strong><br>'
+                'Total Reports: <span style="color: #007bff; font-weight: bold;">{}</span><br>'
+                'Last 24h: <span style="color: #28a745; font-weight: bold;">{}</span><br>'
+                '<a href="/admin/app/trafficanalysis/" style="color: #007bff; text-decoration: none;">→ View Analysis</a>'
+                '</div>',
+                total_analyses, recent_analyses
+            )
+        except Exception as e:
+            return format_html('<span style="color: #dc3545;">Error loading traffic analysis status</span>')
+    traffic_analysis_status.short_description = 'Traffic Analysis'
+    
+    def device_behavior_status(self, obj):
+        """Display device behavior profiles status"""
+        from django.utils.html import format_html
+        try:
+            profiles = models.DeviceBehaviorProfile.objects.all()
+            total_profiles = profiles.count()
+            flagged_profiles = profiles.filter(Trust_Level__in=['suspicious', 'abusive', 'banned']).count()
+            
+            return format_html(
+                '<div style="background: #f8f9fa; padding: 10px; border-radius: 5px;">'
+                '<strong>Device Behavior Profiles:</strong><br>'
+                'Total Profiles: <span style="color: #007bff; font-weight: bold;">{}</span><br>'
+                'Flagged: <span style="color: #dc3545; font-weight: bold;">{}</span><br>'
+                '<a href="/admin/app/devicebehaviorprofile/" style="color: #007bff; text-decoration: none;">→ View Profiles</a>'
+                '</div>',
+                total_profiles, flagged_profiles
+            )
+        except Exception as e:
+            return format_html('<span style="color: #dc3545;">Error loading device behavior status</span>')
+    device_behavior_status.short_description = 'Device Behavior Profiles'
+    
+    def network_intelligence_status(self, obj):
+        """Display network intelligence status"""
+        from django.utils.html import format_html
+        try:
+            intelligence = models.NetworkIntelligence.objects.all()
+            total_reports = intelligence.count()
+            recent_reports = intelligence.filter(Timestamp__gte=timezone.now() - timezone.timedelta(hours=24)).count()
+            
+            return format_html(
+                '<div style="background: #f8f9fa; padding: 10px; border-radius: 5px;">'
+                '<strong>Network Intelligence:</strong><br>'
+                'Total Reports: <span style="color: #007bff; font-weight: bold;">{}</span><br>'
+                'Last 24h: <span style="color: #28a745; font-weight: bold;">{}</span><br>'
+                '<a href="/admin/app/networkintelligence/" style="color: #007bff; text-decoration: none;">→ View Intelligence</a>'
+                '</div>',
+                total_reports, recent_reports
+            )
+        except Exception as e:
+            return format_html('<span style="color: #dc3545;">Error loading network intelligence status</span>')
+    network_intelligence_status.short_description = 'Network Intelligence'
 
     def changelist_view(self, request, extra_context=None):
         extra_context = {'title': 'Security Settings'}
@@ -2210,6 +2431,9 @@ class PisoWifiAdminSite(admin.AdminSite):
                 Date__gte=today
             ).aggregate(total=Sum('Denomination'))['total'] or 0
             
+            # Total revenue (all time)
+            total_revenue = models.Ledger.objects.aggregate(total=Sum('Denomination'))['total'] or 0
+            
             # Revenue data for chart (last 7 days)
             revenue_data = []
             revenue_labels = []
@@ -2259,7 +2483,7 @@ class PisoWifiAdminSite(admin.AdminSite):
                 'total_clients': total_clients,
                 'active_clients': active_clients,
                 'today_revenue': today_revenue,
-                'network_status': 'Operational',
+                'total_revenue': total_revenue,
                 'revenue_data': json.dumps(revenue_data),
                 'revenue_labels': json.dumps(revenue_labels),
                 'client_status_data': json.dumps([connected_count, paused_count, disconnected_count]),
@@ -2273,7 +2497,7 @@ class PisoWifiAdminSite(admin.AdminSite):
                 'total_clients': 0,
                 'active_clients': 0,
                 'today_revenue': 0,
-                'network_status': 'Unknown',
+                'total_revenue': 0,
                 'revenue_data': json.dumps([0, 0, 0, 0, 0, 0, 0]),
                 'revenue_labels': json.dumps(['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']),
                 'client_status_data': json.dumps([0, 0, 0]),
@@ -2506,10 +2730,13 @@ class SystemUpdateAdmin(admin.ModelAdmin):
         }
     
     def changelist_view(self, request, extra_context=None):
+        from django.urls import reverse
         extra_context = extra_context or {}
         extra_context.update({
             'title': 'System Updates',
             'check_updates_button': True,
+            'update_settings_button': True,
+            'update_settings_url': reverse('admin:app_updatesettings_change', args=[1]),
             'has_add_permission': False,  # Don't show Add button since updates come from GitHub
         })
         
@@ -2889,14 +3116,8 @@ class SystemUpdateAdmin(admin.ModelAdmin):
 class UpdateSettingsAdmin(Singleton):
     fieldsets = (
         ('Repository Settings', {
-            'fields': ('GitHub_Repository', 'Update_Channel', 'current_version_display')
+            'fields': ('GitHub_Repository', 'Update_Channel', 'current_version_display', 'Check_Interval_Hours', 'Auto_Download', 'Auto_Install', 'Last_Check', 'Backup_Before_Update', 'Max_Backup_Count')
         }),
-        ('Auto Update Configuration', {
-            'fields': ('Check_Interval_Hours', 'Auto_Download', 'Auto_Install', 'Last_Check')
-        }),
-        ('Backup Settings', {
-            'fields': ('Backup_Before_Update', 'Max_Backup_Count')
-        })
     )
     
     readonly_fields = ('Last_Check', 'current_version_display')
@@ -3451,24 +3672,49 @@ admin.site.register(models.DatabaseBackup, DatabaseBackupAdmin)
 admin.site.register(models.VLANSettings, VLANSettingsAdmin)
 
 
+# ZeroTier Monitoring Data Inline Admin
+class ZeroTierMonitoringDataInline(admin.TabularInline):
+    model = models.ZeroTierMonitoringData
+    extra = 0
+    max_num = 20  # Limit number of monitoring records shown
+    
+    fields = ('timestamp', 'network_status_inline', 'connected_clients', 'cpu_usage', 'memory_usage', 'total_revenue_inline')
+    readonly_fields = ('timestamp', 'network_status_inline', 'connected_clients', 'cpu_usage', 'memory_usage', 'total_revenue_inline')
+    ordering = ['-timestamp']
+    
+    def network_status_inline(self, obj):
+        if obj.network_online:
+            return format_html('<span style="color: #28a745; font-weight: 600;">🟢 ONLINE</span>')
+        return format_html('<span style="color: #dc3545; font-weight: 600;">🔴 OFFLINE</span>')
+    network_status_inline.short_description = 'Network'
+    
+    def total_revenue_inline(self, obj):
+        if obj.total_revenue:
+            return format_html('<span style="color: #28a745; font-weight: 600;">₱{:.2f}</span>', obj.total_revenue)
+        return format_html('<span style="color: #6c757d;">₱0.00</span>')
+    total_revenue_inline.short_description = 'Revenue'
+    
+    def has_add_permission(self, request, obj):
+        return False  # Monitoring data is auto-generated
+    
+    def has_delete_permission(self, request, obj):
+        return True  # Allow cleanup of old monitoring data
+
+
 class ZeroTierSettingsAdmin(Singleton):
     """Admin for ZeroTier remote monitoring configuration"""
+    inlines = [ZeroTierMonitoringDataInline]
+    
     fieldsets = (
+        ('Status Information', {
+            'fields': ('network_id', 'network_name', 'connection_status_display', 'zerotier_ip', 'last_seen', 'last_monitoring_update'),
+            'classes': ('collapse',)
+        }),
         ('API Configuration', {
             'fields': ('api_token', 'central_url')
         }),
-        ('Network Configuration', {
-            'fields': ('network_id', 'network_name')
-        }),
         ('Device Configuration', {
-            'fields': ('device_name', 'device_description')
-        }),
-        ('Monitoring Settings', {
-            'fields': ('enable_monitoring', 'auto_authorize', 'monitoring_interval')
-        }),
-        ('Status Information', {
-            'fields': ('connection_status_display', 'zerotier_ip', 'last_seen', 'last_monitoring_update'),
-            'classes': ('collapse',)
+            'fields': ('device_name', 'device_description', 'enable_monitoring', 'auto_authorize', 'monitoring_interval')
         })
     )
     
@@ -3687,29 +3933,13 @@ class ZeroTierSettingsAdmin(Singleton):
         super().save_model(request, obj, form, change)
 
 
-class ZeroTierMonitoringDataAdmin(admin.ModelAdmin):
-    """Admin for ZeroTier monitoring data"""
-    list_display = ('timestamp', 'network_status', 'connected_clients', 'cpu_usage', 'memory_usage', 'total_revenue')
-    list_filter = ('network_online', 'timestamp')
-    readonly_fields = ('timestamp', 'network_online', 'zerotier_version', 'node_id', 
-                      'cpu_usage', 'memory_usage', 'disk_usage', 'connected_clients',
-                      'total_bandwidth_up', 'total_bandwidth_down', 'active_vouchers',
-                      'total_revenue', 'coin_queue_count')
-    ordering = ('-timestamp',)
-    
-    def network_status(self, obj):
-        return "🟢 Online" if obj.network_online else "🔴 Offline"
-    network_status.short_description = 'Network Status'
-    
-    def has_add_permission(self, request):
-        return False  # Monitoring data is auto-generated
-    
-    def has_change_permission(self, request, obj=None):
-        return False  # Read-only data
+
+
 
 
 admin.site.register(models.ZeroTierSettings, ZeroTierSettingsAdmin)
-admin.site.register(models.ZeroTierMonitoringData, ZeroTierMonitoringDataAdmin)
+# Note: ZeroTierMonitoringData is now managed as inline within ZeroTierSettings
+# admin.site.register(models.ZeroTierMonitoringData, ZeroTierMonitoringDataAdmin)
 
 
 class PortPrioritizationAdmin(admin.ModelAdmin):
@@ -3925,3 +4155,536 @@ class PortPrioritizationAdmin(admin.ModelAdmin):
                 messages.warning(request, f'Port prioritization rule "{obj.rule_name}" saved but error removing traffic control: {str(e)}')
 
 admin.site.register(models.PortPrioritization, PortPrioritizationAdmin)
+
+
+# Portal Banner Inline Admin
+class PortalBannerInline(admin.TabularInline):
+    model = models.PortalBanner
+    extra = 0
+    max_num = 10  # Limit number of banners
+    
+    fields = ('image_preview', 'name', 'banner_type', 'image', 'is_active', 'display_order', 'link_url', 'advanced_toggle')
+    readonly_fields = ('image_preview', 'advanced_toggle')
+    ordering = ['display_order', 'name']
+    
+    def image_preview(self, obj):
+        if obj.image:
+            return format_html(
+                '<img src="{}" style="max-width: 60px; max-height: 40px; object-fit: cover; border-radius: 4px; border: 1px solid #ddd;" />',
+                obj.image.url
+            )
+        return format_html('<span style="color: #999; font-style: italic; font-size: 11px;">No image</span>')
+    image_preview.short_description = 'Preview'
+    
+    def advanced_toggle(self, obj):
+        if obj.pk:
+            return format_html(
+                '<a href="#" onclick="toggleAdvanced({}); return false;" style="color: #007cba; text-decoration: none; font-size: 11px;">⚙️ Advanced</a>',
+                obj.pk
+            )
+        return '-'
+    advanced_toggle.short_description = 'Options'
+    
+    class Media:
+        css = {
+            'all': ('admin/css/portal_banner_inline.css',)
+        }
+
+
+# Portal Audio Inline Admin
+class PortalAudioInline(admin.TabularInline):
+    model = models.PortalAudio
+    extra = 0
+    max_num = 10  # Limit number of audio files
+    
+    fields = ('audio_preview', 'name', 'audio_type', 'audio_file', 'is_active', 'volume_display', 'loop_display')
+    readonly_fields = ('audio_preview', 'volume_display', 'loop_display')
+    ordering = ['audio_type', 'name']
+    
+    def audio_preview(self, obj):
+        if obj.audio_file:
+            return format_html(
+                '<audio controls style="width: 160px; height: 25px;"><source src="{}" type="audio/mpeg">Audio not supported</audio>',
+                obj.audio_file.url
+            )
+        return format_html('<span style="color: #999; font-style: italic; font-size: 11px;">No audio</span>')
+    audio_preview.short_description = 'Preview'
+    
+    def volume_display(self, obj):
+        volume = obj.volume or 50
+        return format_html(
+            '<div style="display: flex; align-items: center; gap: 6px; min-width: 80px;">'
+            '<div style="width: 50px; height: 6px; background: #e0e0e0; border-radius: 3px; overflow: hidden;">'
+            '<div style="height: 100%; width: {}%; background: linear-gradient(90deg, #4caf50 0%, #2196f3 50%, #ff9800 100%); border-radius: 3px;"></div>'
+            '</div>'
+            '<span style="font-size: 10px; color: #666; font-weight: 500;">{}%</span>'
+            '</div>',
+            volume, volume
+        )
+    volume_display.short_description = 'Volume'
+    
+    def loop_display(self, obj):
+        if obj.loop:
+            return format_html('<span style="color: #2e7d32; font-size: 11px; font-weight: 600;">LOOP</span>')
+        return format_html('<span style="color: #757575; font-size: 11px;">ONCE</span>')
+    loop_display.short_description = 'Loop'
+    
+    class Media:
+        css = {
+            'all': ('admin/css/portal_audio_inline.css',)
+        }
+
+
+class PortalSettingsAdmin(admin.ModelAdmin):
+    list_display = ('portal_title', 'hotspot_name', 'logo_preview', 'color_preview', 'maintenance_status', 'features_summary', 'updated_at')
+    
+    # Include Banner and Audio management as inlines
+    inlines = [PortalBannerInline, PortalAudioInline]
+    
+    class Media:
+        css = {
+            'all': ('admin/css/portal_settings.css', 'admin/css/portal_banner_inline.css', 'admin/css/portal_audio_inline.css')
+        }
+    
+    fieldsets = (
+        ('Basic Portal Information', {
+            'fields': (
+                'portal_title',
+                'portal_subtitle', 
+                'hotspot_name',
+                'hotspot_address',
+                'created_at',
+                'updated_at'
+            )
+        }),
+        ('Portal Features & Behavior', {
+            'fields': (
+                'enable_vouchers',
+                'enable_pause_resume',
+                'pause_resume_min_time',
+                'enable_social_login',
+                'redirect_url',
+                'show_timer',
+                'show_data_usage',
+                'auto_refresh_interval',
+                'slot_timeout'
+            ),
+            'description': 'Configure portal features, functionality, and display behavior'
+        }),
+        ('Branding & Logo', {
+            'fields': (
+                'logo',
+                'favicon',
+                'primary_color',
+                'secondary_color',
+                'background_color',
+                'text_color'
+            ),
+            'description': 'Upload logo and favicon for your portal. Customize portal colors and theme using hex color codes (e.g., #007bff). Banner images are managed in the Portal Banners section below.'
+        }),
+        ('Maintenance Mode', {
+            'fields': (
+                'maintenance_mode',
+                'maintenance_message'
+            ),
+            'classes': ('collapse',),
+            'description': 'Maintenance mode settings'
+        })
+    )
+    
+    readonly_fields = ('created_at', 'updated_at')
+    
+    def logo_preview(self, obj):
+        """Show logo preview in admin list"""
+        from django.utils.html import format_html
+        if obj.logo:
+            return format_html(
+                '<img src="{}" style="max-height: 40px; max-width: 60px; object-fit: contain; border-radius: 4px;" alt="Logo"/>',
+                obj.logo.url
+            )
+        return format_html('<span style="color: #999; font-style: italic;">No logo</span>')
+    logo_preview.short_description = 'Logo'
+    
+    def color_preview(self, obj):
+        """Show color scheme preview"""
+        from django.utils.html import format_html
+        primary = obj.primary_color or '#007bff'
+        secondary = obj.secondary_color or '#0056b3'
+        return format_html(
+            '<div style="display: flex; gap: 2px; align-items: center;">'
+            '<div style="width: 20px; height: 20px; background-color: {}; border-radius: 3px; border: 1px solid #ddd;" title="Primary: {}"></div>'
+            '<div style="width: 20px; height: 20px; background-color: {}; border-radius: 3px; border: 1px solid #ddd;" title="Secondary: {}"></div>'
+            '<span style="font-size: 11px; color: #666; margin-left: 5px;">Theme</span>'
+            '</div>',
+            primary, primary, secondary, secondary
+        )
+    color_preview.short_description = 'Colors'
+    
+    def maintenance_status(self, obj):
+        """Show maintenance mode status"""
+        from django.utils.html import format_html
+        if obj.maintenance_mode:
+            return format_html(
+                '<span class="maintenance-status maintenance-active" style="background-color: #ffebee; color: #d32f2f; border: 1px solid #ffcdd2; padding: 4px 8px; border-radius: 12px; font-size: 12px; font-weight: 600;">MAINTENANCE</span>'
+            )
+        else:
+            return format_html(
+                '<span class="maintenance-status maintenance-inactive" style="background-color: #e8f5e8; color: #2e7d32; border: 1px solid #c8e6c9; padding: 4px 8px; border-radius: 12px; font-size: 12px; font-weight: 600;">ACTIVE</span>'
+            )
+    maintenance_status.short_description = 'Status'
+    maintenance_status.admin_order_field = 'maintenance_mode'
+    
+    def features_summary(self, obj):
+        """Show enabled features summary"""
+        from django.utils.html import format_html
+        from django.utils.safestring import mark_safe
+        
+        features = []
+        if obj.enable_vouchers:
+            features.append('<span style="background: #e3f2fd; color: #1976d2; padding: 1px 4px; border-radius: 3px; font-size: 10px;">VOUCHER</span>')
+        if obj.enable_pause_resume:
+            features.append('<span style="background: #fff3e0; color: #f57c00; padding: 1px 4px; border-radius: 3px; font-size: 10px;">PAUSE</span>')
+        if obj.enable_social_login:
+            features.append('<span style="background: #e8f5e8; color: #2e7d32; padding: 1px 4px; border-radius: 3px; font-size: 10px;">SOCIAL</span>')
+        if obj.show_timer:
+            features.append('<span style="background: #fce4ec; color: #c2185b; padding: 1px 4px; border-radius: 3px; font-size: 10px;">TIMER</span>')
+        
+        if features:
+            html_content = '<div style="display: flex; flex-wrap: wrap; gap: 2px;">{}</div>'.format(''.join(features))
+            return mark_safe(html_content)
+        else:
+            return format_html('<span style="color: #999; font-style: italic;">Basic</span>')
+    features_summary.short_description = 'Features'
+    
+    def has_add_permission(self, request):
+        # Only allow one instance (singleton)
+        return not models.PortalSettings.objects.exists()
+    
+    def has_delete_permission(self, request, obj=None):
+        # Don't allow deletion of portal settings
+        return False
+    
+    def changelist_view(self, request, extra_context=None):
+        extra_context = extra_context or {}
+        extra_context.update({
+            'title': 'Portal Settings - Complete Portal Management',
+            'subtitle': 'Configure portal settings, banners, audio files, and all portal features in one place'
+        })
+        response = super().changelist_view(request, extra_context=extra_context)
+        # Add custom CSS class to the response context
+        if hasattr(response, 'context_data'):
+            response.context_data['cl_css_classes'] = getattr(response.context_data.get('cl'), 'css_classes', '') + ' portal-settings-admin'
+        return response
+
+
+class PortalBannerAdmin(admin.ModelAdmin):
+    list_display = ('name', 'banner_type', 'is_active', 'display_order', 'schedule_status', 'image_preview', 'created_at')
+    list_filter = ('banner_type', 'is_active', 'start_date', 'end_date')
+    search_fields = ('name', 'alt_text')
+    ordering = ['display_order', 'name']
+    
+    fieldsets = (
+        ('Basic Information', {
+            'fields': ('name', 'banner_type', 'image', 'alt_text')
+        }),
+        ('Banner Link', {
+            'fields': ('link_url', 'open_in_new_tab'),
+            'description': 'Optional: Make banner clickable with a link'
+        }),
+        ('Display Settings', {
+            'fields': ('is_active', 'display_order'),
+            'description': 'Control banner visibility and display order'
+        }),
+        ('Schedule Settings', {
+            'fields': ('start_date', 'end_date'),
+            'classes': ('collapse',),
+            'description': 'Optional: Schedule when banner should be displayed'
+        }),
+        ('Image Constraints', {
+            'fields': ('max_width', 'max_height'),
+            'classes': ('collapse',),
+            'description': 'Maximum dimensions for uploaded images'
+        })
+    )
+    
+    def image_preview(self, obj):
+        if obj.image:
+            from django.utils.html import format_html
+            return format_html(
+                '<img src="{}" style="max-width: 100px; max-height: 60px; object-fit: cover;" />',
+                obj.image.url
+            )
+        return "No image"
+    image_preview.short_description = 'Preview'
+    
+    def schedule_status(self, obj):
+        from django.utils.html import format_html
+        if not obj.start_date and not obj.end_date:
+            return format_html('<span style="color: #28a745;">Always Active</span>')
+        
+        if obj.is_scheduled_active():
+            return format_html('<span style="color: #28a745;">Active</span>')
+        else:
+            return format_html('<span style="color: #dc3545;">Scheduled Inactive</span>')
+    schedule_status.short_description = 'Schedule Status'
+    
+    def changelist_view(self, request, extra_context=None):
+        extra_context = extra_context or {}
+        extra_context.update({
+            'title': 'Portal - Banner Images',
+            'subtitle': 'Upload and manage portal banner images with scheduling'
+        })
+        return super().changelist_view(request, extra_context=extra_context)
+    
+    actions = ['activate_banners', 'deactivate_banners', 'reset_display_order']
+    
+    def activate_banners(self, request, queryset):
+        updated = queryset.update(is_active=True)
+        self.message_user(request, f'{updated} banner(s) activated.')
+    activate_banners.short_description = "Activate selected banners"
+    
+    def deactivate_banners(self, request, queryset):
+        updated = queryset.update(is_active=False)
+        self.message_user(request, f'{updated} banner(s) deactivated.')
+    deactivate_banners.short_description = "Deactivate selected banners"
+    
+    def reset_display_order(self, request, queryset):
+        for i, banner in enumerate(queryset.order_by('created_at'), 1):
+            banner.display_order = i * 10
+            banner.save()
+        self.message_user(request, f'Display order reset for {queryset.count()} banner(s).')
+    reset_display_order.short_description = "Reset display order (10, 20, 30...)"
+
+
+class PortalAudioAdmin(admin.ModelAdmin):
+    list_display = ('name', 'audio_type_display', 'audio_preview', 'volume_display', 'loop_display', 'is_active')
+    list_filter = ('audio_type', 'is_active')
+    search_fields = ('name',)
+    
+    class Media:
+        css = {
+            'all': ('admin/css/portal_audio.css',)
+        }
+    
+    fieldsets = (
+        ('Basic Information', {
+            'fields': ('name', 'audio_type', 'audio_file')
+        }),
+        ('Audio Settings', {
+            'fields': ('is_active', 'volume', 'loop'),
+            'description': 'Configure audio playback settings'
+        }),
+        ('Audio Properties', {
+            'fields': ('duration', 'file_size'),
+            'classes': ('collapse',),
+            'description': 'Audio file properties (auto-populated)'
+        })
+    )
+    
+    readonly_fields = ('duration', 'file_size')
+    
+    def audio_type_display(self, obj):
+        """Display audio type with styled badge"""
+        from django.utils.html import format_html
+        type_class = f"audio-type-{obj.audio_type}"
+        return format_html(
+            '<span class="audio-type-badge {}">{}</span>',
+            type_class, obj.get_audio_type_display()
+        )
+    audio_type_display.short_description = 'Type'
+    audio_type_display.admin_order_field = 'audio_type'
+    
+    def audio_preview(self, obj):
+        """Display audio preview player in the list view"""
+        if obj.audio_file:
+            from django.utils.html import format_html
+            return format_html(
+                '<div class="portal-audio-preview">'
+                '<audio controls preload="none" style="width: 200px; height: 32px;">'
+                '<source src="{}" type="audio/mpeg">'
+                'Your browser does not support the audio element.'
+                '</audio>'
+                '</div>',
+                obj.audio_file.url
+            )
+        return format_html('<span style="color: #999; font-style: italic;">No audio file</span>')
+    audio_preview.short_description = 'Preview'
+    audio_preview.allow_tags = True
+    
+    def volume_display(self, obj):
+        """Display volume with progress bar"""
+        from django.utils.html import format_html
+        volume = obj.volume or 50
+        return format_html(
+            '<div class="volume-progress-container" title="{}%">'
+            '<div class="volume-progress-bar">'
+            '<div class="volume-progress-fill" style="width: {}%"></div>'
+            '</div>'
+            '<span class="volume-percentage">{}%</span>'
+            '</div>',
+            volume, volume, volume
+        )
+    volume_display.short_description = 'Volume'
+    volume_display.admin_order_field = 'volume'
+    
+    def loop_display(self, obj):
+        """Display loop status without emojis"""
+        from django.utils.html import format_html
+        if obj.loop:
+            return format_html('<span class="loop-status loop-yes" title="Audio will loop continuously">Yes</span>')
+        else:
+            return format_html('<span class="loop-status loop-no" title="Audio plays once only">No</span>')
+    loop_display.short_description = 'Loop'
+    loop_display.admin_order_field = 'loop'
+    
+    def file_info(self, obj):
+        if obj.audio_file:
+            from django.utils.html import format_html
+            
+            # Handle file_size safely
+            try:
+                if obj.file_size and isinstance(obj.file_size, (int, float)):
+                    file_size_mb = obj.file_size / (1024 * 1024)
+                else:
+                    # Try to get file size from the file object
+                    file_size_mb = obj.audio_file.size / (1024 * 1024) if hasattr(obj.audio_file, 'size') else 0
+            except (TypeError, AttributeError, ZeroDivisionError):
+                file_size_mb = 0
+            
+            return format_html(
+                '<span style="font-family: monospace;">{:.1f} MB</span><br/>'
+                '<audio controls style="width: 200px; height: 30px;">'
+                '<source src="{}" type="audio/mpeg">'
+                'Your browser does not support the audio element.'
+                '</audio>',
+                file_size_mb, obj.audio_file.url
+            )
+        return "No file"
+    file_info.short_description = 'File Info & Preview'
+    
+    def changelist_view(self, request, extra_context=None):
+        extra_context = extra_context or {}
+        extra_context.update({
+            'title': 'Portal - Audio Files',
+            'subtitle': 'Upload and manage portal audio files (background music, sound effects)'
+        })
+        response = super().changelist_view(request, extra_context=extra_context)
+        # Add custom CSS class to the response context
+        if hasattr(response, 'context_data'):
+            response.context_data['cl_css_classes'] = getattr(response.context_data.get('cl'), 'css_classes', '') + ' portal-audio-admin'
+        return response
+    
+    # actions = ['activate_audio', 'deactivate_audio', 'set_default_volume']
+    
+    def activate_audio(self, request, queryset):
+        updated = queryset.update(is_active=True)
+        self.message_user(request, f'{updated} audio file(s) activated.')
+    activate_audio.short_description = "Activate selected audio files"
+    
+    def deactivate_audio(self, request, queryset):
+        updated = queryset.update(is_active=False)
+        self.message_user(request, f'{updated} audio file(s) deactivated.')
+    deactivate_audio.short_description = "Deactivate selected audio files"
+    
+    def set_default_volume(self, request, queryset):
+        updated = queryset.update(volume=50)
+        self.message_user(request, f'Volume set to 50% for {updated} audio file(s).')
+    set_default_volume.short_description = "Set volume to 50% for selected files"
+
+
+class PortalTextAdmin(admin.ModelAdmin):
+    list_display = ('name', 'text_type', 'language', 'is_active', 'content_preview', 'allow_html', 'updated_at')
+    list_filter = ('text_type', 'language', 'is_active', 'allow_html')
+    search_fields = ('name', 'content')
+    list_editable = ('is_active',)
+    ordering = ['text_type', 'language', 'display_order']
+    
+    fieldsets = (
+        ('Basic Information', {
+            'fields': ('name', 'text_type', 'language', 'content')
+        }),
+        ('Text Formatting', {
+            'fields': ('allow_html', 'font_size', 'font_weight', 'text_align'),
+            'description': 'Configure text appearance and formatting'
+        }),
+        ('Display Settings', {
+            'fields': ('is_active', 'display_order'),
+            'description': 'Control text visibility and display order'
+        })
+    )
+    
+    def content_preview(self, obj):
+        content = obj.content[:100] + '...' if len(obj.content) > 100 else obj.content
+        if obj.allow_html:
+            from django.utils.html import format_html
+            return format_html('<span style="color: #e83e8c;">[HTML]</span> {}', content)
+        return content
+    content_preview.short_description = 'Content Preview'
+    
+    def changelist_view(self, request, extra_context=None):
+        extra_context = extra_context or {}
+        extra_context.update({
+            'title': 'Portal - Text Content',
+            'subtitle': 'Customize portal text messages and content in multiple languages'
+        })
+        return super().changelist_view(request, extra_context=extra_context)
+    
+    actions = ['activate_texts', 'deactivate_texts', 'create_default_texts']
+    
+    def activate_texts(self, request, queryset):
+        updated = queryset.update(is_active=True)
+        self.message_user(request, f'{updated} text(s) activated.')
+    activate_texts.short_description = "Activate selected texts"
+    
+    def deactivate_texts(self, request, queryset):
+        updated = queryset.update(is_active=False)
+        self.message_user(request, f'{updated} text(s) deactivated.')
+    deactivate_texts.short_description = "Deactivate selected texts"
+    
+    def create_default_texts(self, request, queryset):
+        """Create default portal texts"""
+        default_texts = [
+            {
+                'name': 'Default Welcome Message',
+                'text_type': 'welcome_message',
+                'content': 'Welcome to our PISOWifi Portal! Insert coins to get connected to the internet.',
+                'language': 'en'
+            },
+            {
+                'name': 'Default Connection Instructions',
+                'text_type': 'instructions',
+                'content': '1. Insert coins to purchase internet time\n2. Wait for connection confirmation\n3. Browse the internet\n4. Use pause/resume to control your session',
+                'language': 'en'
+            },
+            {
+                'name': 'Default Contact Info',
+                'text_type': 'contact_info',
+                'content': 'For technical support, please contact the hotspot administrator.',
+                'language': 'en'
+            }
+        ]
+        
+        created_count = 0
+        for text_data in default_texts:
+            text, created = models.PortalText.objects.get_or_create(
+                name=text_data['name'],
+                text_type=text_data['text_type'],
+                language=text_data['language'],
+                defaults=text_data
+            )
+            if created:
+                created_count += 1
+        
+        if created_count > 0:
+            self.message_user(request, f'{created_count} default portal text(s) created.')
+        else:
+            self.message_user(request, 'Default portal texts already exist.')
+    create_default_texts.short_description = "Create default portal texts"
+
+
+# Register Portal Models
+admin.site.register(models.PortalSettings, PortalSettingsAdmin)
+# Note: PortalBanner and PortalAudio are now managed as inlines within PortalSettings
+# admin.site.register(models.PortalBanner, PortalBannerAdmin)
+# admin.site.register(models.PortalAudio, PortalAudioAdmin)
+admin.site.register(models.PortalText, PortalTextAdmin)

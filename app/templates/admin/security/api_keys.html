@@ -1,0 +1,469 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block title %}{{ page_title }} - {{ site_title|default:"PISOWifi Admin" }}{% endblock %}
+
+{% block extrahead %}
+    {{ block.super }}
+    <style>
+        .api-key-management {
+            padding: 20px 0;
+        }
+        
+        .management-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+            margin-bottom: 30px;
+        }
+        
+        .management-card {
+            background: #fff;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 25px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .management-card h3 {
+            margin: 0 0 20px 0;
+            color: #333;
+            font-size: 18px;
+            border-bottom: 2px solid #417690;
+            padding-bottom: 10px;
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        .form-group label {
+            display: block;
+            font-weight: bold;
+            margin-bottom: 5px;
+            color: #333;
+        }
+        
+        .form-group input,
+        .form-group select,
+        .form-group textarea {
+            width: 100%;
+            padding: 8px 12px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        
+        .form-group input:focus,
+        .form-group select:focus,
+        .form-group textarea:focus {
+            outline: none;
+            border-color: #417690;
+            box-shadow: 0 0 5px rgba(65, 118, 144, 0.3);
+        }
+        
+        .permissions-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 10px;
+            max-height: 200px;
+            overflow-y: auto;
+            padding: 10px;
+            border: 1px solid #eee;
+            border-radius: 4px;
+            background: #f9f9f9;
+        }
+        
+        .permission-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px;
+            background: #fff;
+            border-radius: 4px;
+            border: 1px solid #e0e0e0;
+        }
+        
+        .permission-item input[type="checkbox"] {
+            width: auto;
+            margin: 0;
+        }
+        
+        .permission-label {
+            font-size: 13px;
+            color: #555;
+            line-height: 1.3;
+        }
+        
+        .permission-desc {
+            font-size: 11px;
+            color: #777;
+            display: block;
+        }
+        
+        .button {
+            background: #417690;
+            color: white;
+            border: none;
+            padding: 12px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            text-decoration: none;
+            display: inline-block;
+            margin-right: 10px;
+        }
+        
+        .button:hover {
+            background: #2d5a73;
+            color: white;
+            text-decoration: none;
+        }
+        
+        .button.danger {
+            background: #dc3545;
+        }
+        
+        .button.danger:hover {
+            background: #c82333;
+        }
+        
+        .button.secondary {
+            background: #6c757d;
+        }
+        
+        .button.secondary:hover {
+            background: #5a6268;
+        }
+        
+        .api-key-result {
+            background: #d4edda;
+            border: 1px solid #c3e6cb;
+            border-radius: 4px;
+            padding: 15px;
+            margin-top: 20px;
+            display: none;
+        }
+        
+        .api-key-result.error {
+            background: #f8d7da;
+            border-color: #f5c6cb;
+        }
+        
+        .api-key-display {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            padding: 15px;
+            margin: 10px 0;
+            font-family: monospace;
+            word-break: break-all;
+        }
+        
+        .api-key-warning {
+            background: #fff3cd;
+            border: 1px solid #ffeaa7;
+            border-radius: 4px;
+            padding: 10px;
+            margin: 10px 0;
+            color: #856404;
+        }
+        
+        .test-results {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            padding: 15px;
+            margin-top: 15px;
+            display: none;
+        }
+        
+        .status-badge {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: bold;
+            color: white;
+        }
+        
+        .status-valid { background: #28a745; }
+        .status-invalid { background: #dc3545; }
+        .status-expired { background: #fd7e14; }
+        
+        .back-link {
+            margin-bottom: 20px;
+        }
+        
+        .documentation {
+            background: #e3f2fd;
+            border: 1px solid #bbdefb;
+            border-radius: 4px;
+            padding: 20px;
+            margin-top: 30px;
+        }
+        
+        .documentation h4 {
+            margin: 0 0 15px 0;
+            color: #1976d2;
+        }
+        
+        .code-example {
+            background: #263238;
+            color: #fff;
+            padding: 15px;
+            border-radius: 4px;
+            margin: 10px 0;
+            overflow-x: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+        }
+    </style>
+{% endblock %}
+
+{% block content %}
+<div class="api-key-management">
+    <div class="back-link">
+        <a href="{% url 'security:dashboard' %}" class="button secondary">← Back to Security Dashboard</a>
+    </div>
+    
+    <h1>🔑 API Key Management</h1>
+    
+    <div class="management-grid">
+        <!-- Create API Key -->
+        <div class="management-card">
+            <h3>Create New API Key</h3>
+            
+            <form id="createApiKeyForm">
+                {% csrf_token %}
+                
+                <div class="form-group">
+                    <label for="keyName">API Key Name *</label>
+                    <input type="text" id="keyName" name="name" placeholder="e.g., Mobile App, External Integration" required>
+                </div>
+                
+                <div class="form-group">
+                    <label for="keyUser">Assign to User</label>
+                    <select id="keyUser" name="user_id">
+                        <option value="">-- Select User (Optional) --</option>
+                        {% for user in users %}
+                        <option value="{{ user.id }}">{{ user.username }} ({{ user.get_full_name }})</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label for="expiresDays">Expires After (Days)</label>
+                    <input type="number" id="expiresDays" name="expires_days" placeholder="Leave blank for no expiration" min="1" max="3650">
+                </div>
+                
+                <div class="form-group">
+                    <label>Permissions</label>
+                    <div class="permissions-grid">
+                        {% for perm_key, perm_desc in permissions.items %}
+                        <div class="permission-item">
+                            <input type="checkbox" id="perm_{{ perm_key }}" name="permissions" value="{{ perm_key }}">
+                            <label for="perm_{{ perm_key }}" class="permission-label">
+                                {{ perm_key|title }}
+                                <span class="permission-desc">{{ perm_desc }}</span>
+                            </label>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+                
+                <button type="submit" class="button">Create API Key</button>
+            </form>
+            
+            <div id="createResult" class="api-key-result">
+                <div id="createMessage"></div>
+            </div>
+        </div>
+        
+        <!-- Test/Manage API Key -->
+        <div class="management-card">
+            <h3>Test & Manage API Keys</h3>
+            
+            <div class="form-group">
+                <label for="testKeyId">API Key ID</label>
+                <input type="text" id="testKeyId" placeholder="pk_xxxxxxxxx">
+            </div>
+            
+            <button type="button" class="button secondary" onclick="testApiKey()">Test API Key</button>
+            <button type="button" class="button danger" onclick="revokeApiKey()">Revoke API Key</button>
+            
+            <div id="testResults" class="test-results">
+                <h4>API Key Status</h4>
+                <div id="testResultContent"></div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Documentation -->
+    <div class="documentation">
+        <h4>📖 API Usage Documentation</h4>
+        
+        <h5>Authentication</h5>
+        <p>Include your API key in the Authorization header:</p>
+        <div class="code-example">
+Authorization: Bearer pk_your_api_key_here</div>
+        
+        <h5>Available Endpoints</h5>
+        <ul>
+            <li><strong>GET /app/api/clients/</strong> - List active clients (requires: read_clients)</li>
+            <li><strong>GET /app/api/sales/summary/</strong> - Get sales summary (requires: read_reports)</li>
+            <li><strong>GET /app/api/system/status/</strong> - Get system status (requires: read_system)</li>
+        </ul>
+        
+        <h5>Example Request</h5>
+        <div class="code-example">
+curl -H "Authorization: Bearer pk_your_api_key_here" \
+     -H "Content-Type: application/json" \
+     https://your-pisowifi.com/app/api/clients/</div>
+        
+        <h5>Rate Limits</h5>
+        <p>API requests are rate limited. Default limits:</p>
+        <ul>
+            <li>100 requests per hour for most endpoints</li>
+            <li>50 requests per hour for reporting endpoints</li>
+            <li>30 requests per hour for system endpoints</li>
+        </ul>
+    </div>
+</div>
+
+<script>
+    // Create API Key Form Handler
+    document.getElementById('createApiKeyForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        
+        const formData = new FormData(this);
+        const resultDiv = document.getElementById('createResult');
+        const messageDiv = document.getElementById('createMessage');
+        
+        fetch('{% url "security:create_api_key" %}', {
+            method: 'POST',
+            body: formData,
+            headers: {
+                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            resultDiv.style.display = 'block';
+            
+            if (data.success) {
+                resultDiv.className = 'api-key-result';
+                messageDiv.innerHTML = `
+                    <h4>✅ API Key Created Successfully!</h4>
+                    <p><strong>Name:</strong> ${data.api_key.name}</p>
+                    <p><strong>Key ID:</strong></p>
+                    <div class="api-key-display">${data.api_key.key_id}</div>
+                    <p><strong>Key Secret:</strong></p>
+                    <div class="api-key-display">${data.api_key.key_secret}</div>
+                    <div class="api-key-warning">
+                        ⚠️ <strong>Important:</strong> Save these credentials now. The secret will not be shown again for security reasons.
+                    </div>
+                    <p><strong>Permissions:</strong> ${data.api_key.permissions.join(', ') || 'None'}</p>
+                    ${data.api_key.expires_at ? `<p><strong>Expires:</strong> ${data.api_key.expires_at}</p>` : '<p><strong>Expires:</strong> Never</p>'}
+                `;
+                
+                // Reset form
+                this.reset();
+            } else {
+                resultDiv.className = 'api-key-result error';
+                messageDiv.innerHTML = `<h4>❌ Error</h4><p>${data.error}</p>`;
+            }
+        })
+        .catch(error => {
+            resultDiv.style.display = 'block';
+            resultDiv.className = 'api-key-result error';
+            messageDiv.innerHTML = `<h4>❌ Error</h4><p>Failed to create API key: ${error}</p>`;
+        });
+    });
+    
+    // Test API Key Function
+    function testApiKey() {
+        const keyId = document.getElementById('testKeyId').value;
+        const resultDiv = document.getElementById('testResults');
+        const contentDiv = document.getElementById('testResultContent');
+        
+        if (!keyId) {
+            alert('Please enter an API Key ID');
+            return;
+        }
+        
+        const formData = new FormData();
+        formData.append('key_id', keyId);
+        formData.append('csrfmiddlewaretoken', document.querySelector('[name=csrfmiddlewaretoken]').value);
+        
+        fetch('{% url "security:test_api_key" %}', {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => response.json())
+        .then(data => {
+            resultDiv.style.display = 'block';
+            
+            if (data.success) {
+                const status = data.api_key_status;
+                const statusBadge = status.is_valid ? 
+                    '<span class="status-badge status-valid">Valid</span>' : 
+                    '<span class="status-badge status-invalid">Invalid/Expired</span>';
+                
+                contentDiv.innerHTML = `
+                    <p><strong>Status:</strong> ${statusBadge}</p>
+                    <p><strong>Name:</strong> ${status.name}</p>
+                    <p><strong>Key ID:</strong> ${status.key_id}</p>
+                    <p><strong>Usage Count:</strong> ${status.usage_count}</p>
+                    <p><strong>Last Used:</strong> ${status.last_used || 'Never'}</p>
+                    <p><strong>Expires:</strong> ${status.expires_at || 'Never'}</p>
+                    <p><strong>Permissions:</strong> ${status.permissions.join(', ') || 'None'}</p>
+                `;
+            } else {
+                contentDiv.innerHTML = `<p style="color: #dc3545;">❌ ${data.error}</p>`;
+            }
+        })
+        .catch(error => {
+            resultDiv.style.display = 'block';
+            contentDiv.innerHTML = `<p style="color: #dc3545;">❌ Error testing API key: ${error}</p>`;
+        });
+    }
+    
+    // Revoke API Key Function
+    function revokeApiKey() {
+        const keyId = document.getElementById('testKeyId').value;
+        
+        if (!keyId) {
+            alert('Please enter an API Key ID');
+            return;
+        }
+        
+        if (!confirm(`Are you sure you want to revoke API key ${keyId}? This action cannot be undone.`)) {
+            return;
+        }
+        
+        const formData = new FormData();
+        formData.append('key_id', keyId);
+        formData.append('csrfmiddlewaretoken', document.querySelector('[name=csrfmiddlewaretoken]').value);
+        
+        fetch('{% url "security:revoke_api_key" %}', {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert(data.message);
+                document.getElementById('testKeyId').value = '';
+                document.getElementById('testResults').style.display = 'none';
+            } else {
+                alert('Error: ' + data.error);
+            }
+        })
+        .catch(error => {
+            alert('Error revoking API key: ' + error);
+        });
+    }
+</script>
+{% csrf_token %}
+{% endblock %}

@@ -36,6 +36,37 @@
         $('input[name="_addanother"]').hide();
         $('input[name="_continue"]').hide();
         
+        // Handle VLAN ID field visibility and requirement based on network mode
+        function toggleVlanIdField() {
+            var networkMode = $('#id_network_mode').val();
+            var vlanIdField = $('#id_vlan_id');
+            var vlanIdRow = vlanIdField.closest('.form-row');
+            
+            if (networkMode === 'vlan') {
+                vlanIdRow.show();
+                vlanIdField.prop('required', true);
+                // Add required asterisk if not present
+                var label = vlanIdRow.find('label');
+                if (!label.find('.required').length) {
+                    label.append(' <span class="required">*</span>');
+                }
+            } else {
+                vlanIdRow.show(); // Keep visible but not required
+                vlanIdField.prop('required', false);
+                vlanIdField.val(''); // Clear value for USB to LAN mode
+                // Remove required asterisk
+                vlanIdRow.find('.required').remove();
+            }
+        }
+        
+        // Initialize on page load
+        $(document).ready(function() {
+            toggleVlanIdField();
+            
+            // Handle network mode changes
+            $('#id_network_mode').on('change', toggleVlanIdField);
+        });
+        
         // Add confirmation for save action
         $('form').on('submit', function(e) {
             if (!confirm('Apply VLAN network configuration? This may temporarily disrupt network connectivity.')) {

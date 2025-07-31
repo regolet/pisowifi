@@ -15,6 +15,11 @@
     <a href="#" class="btn btn-success" id="check-updates-btn" onclick="checkForUpdates(); return false;" style="background-color: #28a745; border-color: #28a745; color: white; padding: 8px 16px; border-radius: 4px; text-decoration: none; margin-left: 5px;">
         <i class="fas fa-sync" style="margin-right: 5px;"></i>Check for Updates
     </a>
+    {% if update_settings_url %}
+    <a href="{{ update_settings_url }}" class="btn btn-primary" id="update-settings-btn" style="background-color: #6f42c1; border-color: #6f42c1; color: white; padding: 8px 16px; border-radius: 4px; text-decoration: none; margin-left: 5px;">
+        <i class="fas fa-cog" style="margin-right: 5px;"></i>Update Settings
+    </a>
+    {% endif %}
 {% endblock %}
 
 {% block content %}

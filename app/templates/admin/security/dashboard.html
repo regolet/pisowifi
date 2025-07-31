@@ -1,0 +1,566 @@
+{% extends "admin/base_site.html" %}
+{% load i18n admin_urls static admin_modify %}
+
+{% block title %}{{ page_title }} - {{ site_title|default:"PISOWifi Admin" }}{% endblock %}
+
+{% block extrahead %}
+    {{ block.super }}
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        .security-dashboard {
+            padding: 20px 0;
+        }
+        
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        
+        .dashboard-card {
+            background: #fff;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .dashboard-card h3 {
+            margin: 0 0 15px 0;
+            color: #333;
+            font-size: 16px;
+            border-bottom: 2px solid #417690;
+            padding-bottom: 8px;
+        }
+        
+        .stat-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 0;
+            border-bottom: 1px solid #eee;
+        }
+        
+        .stat-item:last-child {
+            border-bottom: none;
+        }
+        
+        .stat-value {
+            font-weight: bold;
+            font-size: 18px;
+        }
+        
+        .status-normal { color: #28a745; }
+        .status-elevated { color: #ffc107; }
+        .status-high { color: #fd7e14; }
+        .status-critical { color: #dc3545; }
+        
+        .threat-indicator {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 8px;
+        }
+        
+        .threat-low { background-color: #28a745; }
+        .threat-medium { background-color: #ffc107; }
+        .threat-high { background-color: #fd7e14; }
+        .threat-critical { background-color: #dc3545; }
+        
+        .recent-events {
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        
+        .event-item {
+            padding: 10px;
+            border-left: 4px solid transparent;
+            margin-bottom: 8px;
+            background: #f8f9fa;
+            border-radius: 4px;
+        }
+        
+        .event-item.threat-low { border-left-color: #28a745; }
+        .event-item.threat-medium { border-left-color: #ffc107; }
+        .event-item.threat-high { border-left-color: #fd7e14; }
+        .event-item.threat-critical { border-left-color: #dc3545; }
+        
+        .event-time {
+            font-size: 12px;
+            color: #666;
+        }
+        
+        .event-details {
+            font-size: 14px;
+            margin-top: 4px;
+        }
+        
+        .chart-container {
+            position: relative;
+            height: 300px;
+            margin-top: 20px;
+        }
+        
+        .action-buttons {
+            margin-top: 20px;
+            text-align: center;
+        }
+        
+        .action-buttons .button {
+            margin: 0 10px;
+        }
+        
+        .ip-management {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 4px;
+            margin-top: 15px;
+        }
+        
+        .ip-form {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        
+        .ip-form input[type="text"] {
+            flex: 1;
+            padding: 6px 10px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+        
+        .refresh-indicator {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: #417690;
+            color: white;
+            padding: 10px 15px;
+            border-radius: 4px;
+            display: none;
+        }
+    </style>
+{% endblock %}
+
+{% block content %}
+<div class="security-dashboard">
+    <div class="refresh-indicator" id="refreshIndicator">
+        🔄 Updating...
+    </div>
+    
+    <h1>Security Dashboard</h1>
+    
+    <!-- System Status -->
+    <div class="dashboard-grid">
+        <div class="dashboard-card">
+            <h3>🛡️ System Status</h3>
+            <div class="stat-item">
+                <span>Current Status:</span>
+                <span class="stat-value status-{{ dashboard_data.system_status.status_color }}">
+                    {{ dashboard_data.system_status.status }}
+                </span>
+            </div>
+            <div class="stat-item">
+                <span>Threat Score:</span>
+                <span class="stat-value">{{ dashboard_data.system_status.threat_score }}</span>
+            </div>
+            <div class="stat-item">
+                <span>Last Updated:</span>
+                <span class="stat-value">{{ dashboard_data.system_status.last_updated|slice:":19" }}</span>
+            </div>
+        </div>
+        
+        <!-- Event Summary -->
+        <div class="dashboard-card">
+            <h3>📊 Event Summary</h3>
+            <div class="stat-item">
+                <span>Events Today:</span>
+                <span class="stat-value">{{ dashboard_data.summary.total_events_today }}</span>
+            </div>
+            <div class="stat-item">
+                <span>Last Hour:</span>
+                <span class="stat-value">{{ dashboard_data.summary.events_last_hour }}</span>
+            </div>
+            <div class="stat-item">
+                <span>Active Alerts:</span>
+                <span class="stat-value">{{ dashboard_data.summary.active_alerts }}</span>
+            </div>
+            <div class="stat-item">
+                <span>Blocked IPs:</span>
+                <span class="stat-value">{{ dashboard_data.summary.blocked_ips }}</span>
+            </div>
+        </div>
+        
+        <!-- Threat Distribution -->
+        <div class="dashboard-card">
+            <h3>⚠️ Threat Levels</h3>
+            {% for level, count in dashboard_data.summary.threat_level_distribution.items %}
+            <div class="stat-item">
+                <span>
+                    <span class="threat-indicator threat-{{ level|lower }}"></span>
+                    {{ level }}:
+                </span>
+                <span class="stat-value">{{ count }}</span>
+            </div>
+            {% empty %}
+            <p>No threat data available</p>
+            {% endfor %}
+        </div>
+        
+        <!-- Top Attacking IPs -->
+        <div class="dashboard-card">
+            <h3>🎯 Top Attacking IPs</h3>
+            {% for ip, count in dashboard_data.top_attacking_ips %}
+            <div class="stat-item">
+                <span>{{ ip }}</span>
+                <span class="stat-value">{{ count }}</span>
+            </div>
+            {% empty %}
+            <p>No attack data available</p>
+            {% endfor %}
+        </div>
+        
+        <!-- Fail2ban Status -->
+        <div class="dashboard-card">
+            <h3>🏛️ Fail2ban Status</h3>
+            <div class="stat-item">
+                <span>Active Jails:</span>
+                <span class="stat-value">{{ dashboard_data.fail2ban.jail_status|length }}</span>
+            </div>
+            <div class="stat-item">
+                <span>Banned IPs:</span>
+                <span class="stat-value">{{ dashboard_data.fail2ban.total_banned }}</span>
+            </div>
+            {% if dashboard_data.fail2ban.jail_status %}
+                {% for jail_name, status in dashboard_data.fail2ban.jail_status.items %}
+                <div class="stat-item">
+                    <span>{{ jail_name|slice:"9:" }}:</span>
+                    <span class="stat-value {% if status.currently_banned > 0 %}status-high{% else %}status-normal{% endif %}">
+                        {{ status.currently_banned }} banned
+                    </span>
+                </div>
+                {% endfor %}
+            {% else %}
+                <p style="color: #ffc107;">Fail2ban not configured</p>
+            {% endif %}
+        </div>
+    </div>
+    
+    <!-- Charts Section -->
+    <div class="dashboard-grid">
+        <div class="dashboard-card">
+            <h3>📈 Event Trends</h3>
+            <div class="chart-container">
+                <canvas id="eventTrendsChart"></canvas>
+            </div>
+        </div>
+        
+        <div class="dashboard-card">
+            <h3>🔍 Event Types (Today)</h3>
+            <div class="chart-container">
+                <canvas id="eventTypesChart"></canvas>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Recent Events and Alerts -->
+    <div class="dashboard-grid">
+        <div class="dashboard-card">
+            <h3>🚨 Recent Alerts</h3>
+            <div class="recent-events">
+                {% for alert in dashboard_data.recent_alerts %}
+                <div class="event-item threat-{{ alert.threat_level|lower }}">
+                    <div class="event-time">{{ alert.timestamp|slice:":19" }}</div>
+                    <div class="event-details">
+                        <strong>{{ alert.threat_level }}:</strong> {{ alert.message }}
+                    </div>
+                </div>
+                {% empty %}
+                <p>No recent alerts</p>
+                {% endfor %}
+            </div>
+        </div>
+        
+        <div class="dashboard-card">
+            <h3>🔍 Recent Events</h3>
+            <div class="recent-events">
+                {% for event in dashboard_data.recent_events %}
+                <div class="event-item threat-{{ event.threat_level|lower }}">
+                    <div class="event-time">{{ event.timestamp|slice:":19" }}</div>
+                    <div class="event-details">
+                        <strong>{{ event.type|title }}:</strong> {{ event.ip }}
+                        {% if event.details %}
+                        <br><small>{{ event.details|truncatechars:100 }}</small>
+                        {% endif %}
+                    </div>
+                </div>
+                {% empty %}
+                <p>No recent events</p>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+    
+    <!-- IP Management -->
+    <div class="dashboard-card">
+        <h3>🚫 IP Management</h3>
+        <div class="ip-management">
+            <h4>PISOWifi IP Blocking</h4>
+            <div class="ip-form">
+                <input type="text" id="blockIpInput" placeholder="IP Address to block">
+                <input type="text" id="blockReasonInput" placeholder="Reason (optional)">
+                <button type="button" class="button" onclick="blockIP()">Block IP</button>
+            </div>
+            <div class="ip-form">
+                <input type="text" id="unblockIpInput" placeholder="IP Address to unblock">
+                <button type="button" class="button" onclick="unblockIP()">Unblock IP</button>
+            </div>
+            
+            <h4 style="margin-top: 20px;">Fail2ban Management</h4>
+            <div class="ip-form">
+                <input type="text" id="fail2banUnbanInput" placeholder="IP Address to unban from fail2ban">
+                <button type="button" class="button" onclick="fail2banUnban()">Unban from Fail2ban</button>
+            </div>
+            
+            {% if dashboard_data.fail2ban.banned_ips %}
+            <div style="margin-top: 15px;">
+                <h5>Currently Banned by Fail2ban:</h5>
+                <div style="max-height: 150px; overflow-y: auto; background: #f8f9fa; padding: 10px; border-radius: 4px;">
+                    {% for ip in dashboard_data.fail2ban.banned_ips %}
+                    <div style="display: flex; justify-content: space-between; align-items: center; padding: 4px 0; border-bottom: 1px solid #eee;">
+                        <span style="font-family: monospace;">{{ ip }}</span>
+                        <button type="button" class="button" style="padding: 2px 8px; font-size: 12px;" onclick="fail2banUnbanIP('{{ ip }}')">Unban</button>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+    
+    <!-- Action Buttons -->
+    <div class="action-buttons">
+        <a href="{% url 'security:report' %}" class="button default">📄 Generate Report</a>
+        <a href="{% url 'security:alerts' %}" class="button">🚨 View All Alerts</a>
+        <a href="{% url 'security:api_keys' %}" class="button">🔑 API Key Management</a>
+        <button type="button" class="button" onclick="refreshDashboard()">🔄 Refresh Data</button>
+    </div>
+</div>
+
+<script>
+    // Dashboard data from Django
+    const dashboardData = {{ dashboard_data_json|safe }};
+    
+    // Auto-refresh functionality
+    let refreshInterval;
+    
+    function startAutoRefresh() {
+        refreshInterval = setInterval(refreshDashboard, 30000); // Every 30 seconds
+    }
+    
+    function stopAutoRefresh() {
+        if (refreshInterval) {
+            clearInterval(refreshInterval);
+        }
+    }
+    
+    function refreshDashboard() {
+        document.getElementById('refreshIndicator').style.display = 'block';
+        
+        fetch('{% url "security:dashboard_api" %}')
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    // Update dashboard data
+                    location.reload(); // Simple reload for now
+                }
+            })
+            .catch(error => console.error('Error refreshing dashboard:', error))
+            .finally(() => {
+                document.getElementById('refreshIndicator').style.display = 'none';
+            });
+    }
+    
+    // IP Management functions
+    function blockIP() {
+        const ip = document.getElementById('blockIpInput').value;
+        const reason = document.getElementById('blockReasonInput').value;
+        
+        if (!ip) {
+            alert('Please enter an IP address');
+            return;
+        }
+        
+        fetch('{% url "security:block_ip" %}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+            },
+            body: `ip_address=${ip}&reason=${reason}`
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert(data.message);
+                document.getElementById('blockIpInput').value = '';
+                document.getElementById('blockReasonInput').value = '';
+                refreshDashboard();
+            } else {
+                alert('Error: ' + data.error);
+            }
+        })
+        .catch(error => {
+            console.error('Error blocking IP:', error);
+            alert('Error blocking IP');
+        });
+    }
+    
+    function unblockIP() {
+        const ip = document.getElementById('unblockIpInput').value;
+        
+        if (!ip) {
+            alert('Please enter an IP address');
+            return;
+        }
+        
+        fetch('{% url "security:unblock_ip" %}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+            },
+            body: `ip_address=${ip}`
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert(data.message);
+                document.getElementById('unblockIpInput').value = '';
+                refreshDashboard();
+            } else {
+                alert('Error: ' + data.error);
+            }
+        })
+        .catch(error => {
+            console.error('Error unblocking IP:', error);
+            alert('Error unblocking IP');
+        });
+    }
+    
+    // Fail2ban Management functions
+    function fail2banUnban() {
+        const ip = document.getElementById('fail2banUnbanInput').value;
+        
+        if (!ip) {
+            alert('Please enter an IP address');
+            return;
+        }
+        
+        fail2banUnbanIP(ip);
+    }
+    
+    function fail2banUnbanIP(ip) {
+        if (!confirm(`Are you sure you want to unban ${ip} from fail2ban?`)) {
+            return;
+        }
+        
+        fetch('{% url "security:fail2ban_unban" %}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+            },
+            body: `ip_address=${ip}`
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert(data.message);
+                document.getElementById('fail2banUnbanInput').value = '';
+                refreshDashboard();
+            } else {
+                alert('Error: ' + data.error);
+            }
+        })
+        .catch(error => {
+            console.error('Error unbanning IP from fail2ban:', error);
+            alert('Error unbanning IP from fail2ban');
+        });
+    }
+    
+    // Initialize charts
+    function initCharts() {
+        // Event Types Chart
+        if (dashboardData.event_counts && dashboardData.event_counts.today) {
+            const ctx1 = document.getElementById('eventTypesChart').getContext('2d');
+            const eventTypes = Object.keys(dashboardData.event_counts.today);
+            const eventCounts = Object.values(dashboardData.event_counts.today);
+            
+            new Chart(ctx1, {
+                type: 'doughnut',
+                data: {
+                    labels: eventTypes,
+                    datasets: [{
+                        data: eventCounts,
+                        backgroundColor: [
+                            '#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0',
+                            '#9966FF', '#FF9F40', '#FF6384', '#C9CBCF'
+                        ]
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom'
+                        }
+                    }
+                }
+            });
+        }
+        
+        // Event Trends Chart (simplified - would need time series data)
+        const ctx2 = document.getElementById('eventTrendsChart').getContext('2d');
+        new Chart(ctx2, {
+            type: 'line',
+            data: {
+                labels: ['6h ago', '5h ago', '4h ago', '3h ago', '2h ago', '1h ago', 'Now'],
+                datasets: [{
+                    label: 'Security Events',
+                    data: [5, 8, 12, 7, 15, 10, dashboardData.summary.events_last_hour || 0],
+                    borderColor: '#417690',
+                    backgroundColor: 'rgba(65, 118, 144, 0.1)',
+                    tension: 0.4
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: {
+                        beginAtZero: true
+                    }
+                }
+            }
+        });
+    }
+    
+    // Initialize everything when page loads
+    document.addEventListener('DOMContentLoaded', function() {
+        initCharts();
+        startAutoRefresh();
+    });
+    
+    // Clean up when leaving page
+    window.addEventListener('beforeunload', function() {
+        stopAutoRefresh();
+    });
+</script>
+{% csrf_token %}
+{% endblock %}

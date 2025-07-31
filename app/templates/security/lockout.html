@@ -1,0 +1,125 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block title %}Account Locked - {{ site_title|default:"PISOWifi Admin" }}{% endblock %}
+
+{% block extrahead %}
+{{ block.super }}
+<style>
+.lockout-container {
+    max-width: 500px;
+    margin: 50px auto;
+    padding: 30px;
+    background: #fff;
+    border-radius: 8px;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    text-align: center;
+}
+
+.lockout-icon {
+    font-size: 64px;
+    color: #dc3545;
+    margin-bottom: 20px;
+}
+
+.countdown-timer {
+    font-size: 24px;
+    font-weight: bold;
+    color: #dc3545;
+    margin: 20px 0;
+    padding: 15px;
+    background: #f8d7da;
+    border: 1px solid #f5c6cb;
+    border-radius: 4px;
+}
+
+.lockout-message {
+    font-size: 16px;
+    color: #721c24;
+    margin-bottom: 20px;
+    line-height: 1.5;
+}
+
+.retry-button {
+    background: #6c757d;
+    color: white;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 4px;
+    cursor: pointer;
+    margin-top: 10px;
+}
+
+.retry-button:hover {
+    background: #5a6268;
+}
+
+.retry-button:disabled {
+    background: #e9ecef;
+    color: #6c757d;
+    cursor: not-allowed;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="lockout-container">
+    <div class="lockout-icon">🔒</div>
+    
+    <h2>Account Temporarily Locked</h2>
+    
+    <div class="lockout-message">
+        {{ lockout_message }}
+    </div>
+    
+    <div class="countdown-timer" id="countdown">
+        Time remaining: <span id="timer-display">{{ time_remaining }}</span>
+    </div>
+    
+    <p style="color: #6c757d; font-size: 14px;">
+        This security measure protects against unauthorized access attempts.
+    </p>
+    
+    <button class="retry-button" id="retryButton" onclick="location.reload()" disabled>
+        Retry Login
+    </button>
+</div>
+
+<script>
+let remainingSeconds = {{ remaining_seconds }};
+
+function updateCountdown() {
+    const timerDisplay = document.getElementById('timer-display');
+    const retryButton = document.getElementById('retryButton');
+    
+    if (remainingSeconds <= 0) {
+        timerDisplay.textContent = 'You can now try again';
+        retryButton.disabled = false;
+        retryButton.style.background = '#28a745';
+        retryButton.textContent = 'Try Again Now';
+        return;
+    }
+    
+    let hours = Math.floor(remainingSeconds / 3600);
+    let minutes = Math.floor((remainingSeconds % 3600) / 60);
+    let seconds = remainingSeconds % 60;
+    
+    let display = '';
+    if (hours > 0) {
+        display += hours + 'h ';
+    }
+    if (minutes > 0) {
+        display += minutes + 'm ';
+    }
+    display += seconds + 's';
+    
+    timerDisplay.textContent = display;
+    remainingSeconds--;
+    
+    setTimeout(updateCountdown, 1000);
+}
+
+// Start the countdown
+updateCountdown();
+</script>
+{% endblock %}

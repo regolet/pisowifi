@@ -391,10 +391,16 @@
     
     const notification = document.createElement('div');
     notification.className = `alert ${alertClass} alert-dismissible fade show position-fixed`;
-    notification.style.cssText = 'top: 20px; right: 20px; z-index: 9999; min-width: 300px;';
+    notification.style.cssText = 'top: 20px; right: 20px; z-index: 9999; min-width: 300px; padding: 12px 16px;';
     notification.innerHTML = `
-        ${message}
-        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+            <span>${message}</span>
+            <button type="button" class="close" onclick="this.parentElement.parentElement.remove()" 
+                    style="background: none; border: none; font-size: 18px; color: inherit; cursor: pointer; padding: 0; margin-left: 10px;"
+                    aria-label="Close">
+                <span aria-hidden="true">&times;</span>
+            </button>
+        </div>
     `;
     
     document.body.appendChild(notification);
@@ -477,25 +483,41 @@
 // Button state management
     function updateDownloadButtonState(updateId, state) {
     const row = document.querySelector(`tr[data-update-id="${updateId}"]`);
-    if (!row) return;
+    if (!row) {
+        // Fallback: look for any row containing the update ID
+        const allRows = document.querySelectorAll('#result_list tbody tr');
+        for (let r of allRows) {
+            const link = r.querySelector('a[href*="/change/"]');
+            if (link && link.href.includes(`/${updateId}/change/`)) {
+                updateButtonsInRow(r, updateId, state);
+                return;
+            }
+        }
+        return;
+    }
     
-    const actionCell = row.querySelector('.action-buttons');
+    updateButtonsInRow(row, updateId, state);
+}
+
+function updateButtonsInRow(row, updateId, state) {
+    // Find the action buttons column (usually the last column)
+    const actionCell = row.querySelector('td:last-child');
     if (!actionCell) return;
     
     let buttonHtml = '';
     
     switch (state) {
         case 'loading':
-            buttonHtml = '<button class="btn btn-sm btn-secondary" disabled><i class="fas fa-spinner fa-spin"></i> Downloading...</button>';
+            buttonHtml = '<span class="button" style="background-color: #6c757d; color: white; padding: 4px 8px; text-decoration: none; border-radius: 3px; margin: 1px; font-size: 11px; white-space: nowrap;"><i class="fas fa-spinner fa-spin" style="margin-right: 3px;"></i>Downloading...</span>';
             break;
         case 'ready':
-            buttonHtml = `<a class="btn btn-sm btn-success" href="#" onclick="installUpdate(${updateId}); return false;">Install</a>`;
+            buttonHtml = `<a class="button" href="#" onclick="installUpdate(${updateId}); return false;" title="Install update" style="background-color: #28a745; color: white; padding: 4px 8px; text-decoration: none; border-radius: 3px; margin: 1px; font-size: 11px; white-space: nowrap;"><i class="fas fa-rocket" style="margin-right: 3px;"></i>Install</a>`;
             break;
         case 'failed':
-            buttonHtml = `<a class="btn btn-sm btn-primary" href="#" onclick="startDownload(${updateId}); return false;">Retry Download</a>`;
+            buttonHtml = `<a class="button" href="#" onclick="startDownload(${updateId}); return false;" title="Retry download" style="background-color: #007bff; color: white; padding: 4px 8px; text-decoration: none; border-radius: 3px; margin: 1px; font-size: 11px; white-space: nowrap;"><i class="fas fa-redo" style="margin-right: 3px;"></i>Retry Download</a>`;
             break;
         case 'error':
-            buttonHtml = `<a class="btn btn-sm btn-primary" href="#" onclick="startDownload(${updateId}); return false;">Download</a>`;
+            buttonHtml = `<a class="button" href="#" onclick="startDownload(${updateId}); return false;" title="Download update" style="background-color: #007bff; color: white; padding: 4px 8px; text-decoration: none; border-radius: 3px; margin: 1px; font-size: 11px; white-space: nowrap;"><i class="fas fa-download" style="margin-right: 3px;"></i>Download</a>`;
             break;
     }
     
@@ -506,88 +528,6 @@
 
     // Initialize when DOM is loaded
     document.addEventListener('DOMContentLoaded', function() {
-    // Try multiple selectors to find the right place to add the button
-    const possibleSelectors = [
-        '.addlink',           // Django default
-        '.btn.btn-primary',   // Jazzmin primary button
-        '.object-tools',      // Django object tools
-        '.actions',           // Actions area
-        '.btn-group',         // Button group
-        'a[href*="add"]'      // Any add link
-    ];
-    
-    let targetElement = null;
-    let buttonAdded = false;
-    
-    for (const selector of possibleSelectors) {
-        const element = document.querySelector(selector);
-        if (element && !buttonAdded) {
-            targetElement = element;
-            break;
-        }
-    }
-    
-    // If we found a target element, add the button
-    if (targetElement) {
-        const checkButton = document.createElement('a');
-        checkButton.className = 'btn btn-success ml-2 mr-2';
-        checkButton.href = '#';
-        checkButton.innerHTML = '<i class="fas fa-sync"></i> Check for Updates';
-        checkButton.style.cssText = 'margin-left: 10px; text-decoration: none;';
-        checkButton.onclick = function(e) {
-            e.preventDefault();
-            checkForUpdates();
-        };
-        
-        // Try to insert after the target element
-        if (targetElement.parentNode) {
-            targetElement.parentNode.insertBefore(checkButton, targetElement.nextSibling);
-            buttonAdded = true;
-        }
-    }
-    
-    // If no target found, try to add to the page header
-    if (!buttonAdded) {
-        const pageHeader = document.querySelector('.content-header') || 
-                          document.querySelector('h1') || 
-                          document.querySelector('.page-header');
-        
-        if (pageHeader) {
-            const checkButton = document.createElement('button');
-            checkButton.className = 'btn btn-success';
-            checkButton.innerHTML = '<i class="fas fa-sync"></i> Check for Updates';
-            checkButton.style.cssText = 'margin-left: 15px; float: right;';
-            checkButton.onclick = function(e) {
-                e.preventDefault();
-                checkForUpdates();
-            };
-            pageHeader.appendChild(checkButton);
-            buttonAdded = true;
-        }
-    }
-    
-    // Last resort: add a floating button
-    if (!buttonAdded) {
-        const floatingButton = document.createElement('button');
-        floatingButton.className = 'btn btn-success';
-        floatingButton.innerHTML = '<i class="fas fa-sync"></i> Check for Updates';
-        floatingButton.style.cssText = `
-            position: fixed;
-            top: 80px;
-            right: 20px;
-            z-index: 1000;
-            border-radius: 25px;
-            padding: 10px 15px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.2);
-        `;
-        floatingButton.title = 'Check for System Updates';
-        floatingButton.onclick = function(e) {
-            e.preventDefault();
-            checkForUpdates();
-        };
-        document.body.appendChild(floatingButton);
-    }
-    
     // Add update-id data attributes to table rows for progress tracking
     const rows = document.querySelectorAll('#result_list tbody tr');
     rows.forEach((row, index) => {

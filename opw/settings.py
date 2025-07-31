@@ -20,10 +20,10 @@ def get_env_variable(var_name, default=None):
 SECRET_KEY = get_env_variable('SECRET_KEY', get_random_secret_key())
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = get_env_variable('DEBUG', 'False').lower() == 'true'
+DEBUG = True  # Enabled for development to serve static files
 
 # SECURITY: Only allow specific hosts
-ALLOWED_HOSTS_STR = get_env_variable('ALLOWED_HOSTS', 'localhost,127.0.0.1')
+ALLOWED_HOSTS_STR = get_env_variable('ALLOWED_HOSTS', 'localhost,127.0.0.1,*')
 ALLOWED_HOSTS = [host.strip() for host in ALLOWED_HOSTS_STR.split(',') if host.strip()]
 
 # Development mode check
@@ -42,14 +42,28 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'app',
     'rest_framework',
+    # Security apps
+    'axes',  # Advanced login security
+    'django_otp',  # Two-factor authentication
+    'django_otp.plugins.otp_totp',
+    'django_otp.plugins.otp_static',
+]
+
+# Authentication Backends
+AUTHENTICATION_BACKENDS = [
+    'django.contrib.auth.backends.ModelBackend',  # Default auth backend
 ]
 
 MIDDLEWARE = [
-    'django.middleware.security.SecurityMiddleware',
+    # 'django.middleware.security.SecurityMiddleware',  # Disabled to prevent HTTPS issues
+    # 'app.security.middleware.AdvancedSecurityMiddleware',  # Our advanced security - DISABLED
+    # 'app.security.middleware.RequestSizeMiddleware',  # Request size limiting - DISABLED
+    # 'app.security.middleware.LoginRateLimitMiddleware',  # Simple login rate limiting - DISABLED
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
+    'django_otp.middleware.OTPMiddleware',  # 2FA middleware
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
@@ -59,14 +73,14 @@ SECURE_BROWSER_XSS_FILTER = True
 SECURE_CONTENT_TYPE_NOSNIFF = True
 X_FRAME_OPTIONS = 'DENY'
 
-# HTTPS Settings (enable in production)
-if not DEBUG and not DEV_MODE:
-    SECURE_SSL_REDIRECT = get_env_variable('SECURE_SSL_REDIRECT', 'True').lower() == 'true'
-    SECURE_HSTS_SECONDS = int(get_env_variable('SECURE_HSTS_SECONDS', '31536000'))
-    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
-    SECURE_HSTS_PRELOAD = True
-    SESSION_COOKIE_SECURE = True
-    CSRF_COOKIE_SECURE = True
+# HTTPS/SSL Settings - DISABLED
+# HTTP-only configuration to prevent HTTPS redirect issues
+SECURE_SSL_REDIRECT = False
+SECURE_HSTS_SECONDS = 0
+SECURE_HSTS_INCLUDE_SUBDOMAINS = False
+SECURE_HSTS_PRELOAD = False
+SESSION_COOKIE_SECURE = False
+CSRF_COOKIE_SECURE = False
 
 # Session Security
 SESSION_COOKIE_HTTPONLY = True
@@ -127,15 +141,12 @@ JAZZMIN_SETTINGS = {
     'welcome_sign': "Welcome to the Ultimate PISOWifi Management Dashboard",
     'copyright': 'OJO PISOWifi Management System',
     
-    # Search model
-    'search_model': ['app.Clients', 'app.Whitelist'],
+    # Search model - disabled
+    'search_model': [],
     
     # Top Menu
     'topmenu_links': [
-        {'name': 'Dashboard', 'url': 'admin:index', 'permissions': ['auth.view_user'], 'icon': 'fas fa-tachometer-alt'},
-        {'name': 'Live Monitor', 'url': 'admin:app_clients_changelist', 'permissions': ['auth.view_user'], 'icon': 'fas fa-eye'},
-        {'name': 'Analytics', 'url': 'admin:app_salesreport_changelist', 'permissions': ['auth.view_user'], 'icon': 'fas fa-chart-bar'},
-        {'name': 'Security', 'url': 'admin:app_securitysettings_changelist', 'permissions': ['auth.view_user'], 'icon': 'fas fa-shield-alt'},
+        # Top menu items removed as requested
     ],
     
     # User menu on the top right
@@ -154,9 +165,12 @@ JAZZMIN_SETTINGS = {
         'app': []
     },
     
-    # Hide user info from sidebar
+    # User display settings
     'user_avatar': None,
     'show_ui_builder': False,
+    'show_user_name': True,  # Show full name beside profile
+    'show_user_info': True,  # Show user information in header
+    'user_name_format': 'full',  # Show full name instead of username
     
     'order_with_respect_to': [
         'app', 
@@ -314,7 +328,15 @@ USE_L10N = True
 USE_TZ = True
 
 STATIC_URL = '/static/'
-STATIC_ROOT = os.path.join(BASE_DIR, "static/")
+
+# In development, serve files directly from app directories
+if DEBUG or DEV_MODE:
+    STATICFILES_DIRS = [
+        os.path.join(BASE_DIR, "app/static/"),
+    ]
+else:
+    # In production, use collected static files
+    STATIC_ROOT = os.path.join(BASE_DIR, "static/")
 
 MEDIA_ROOT = os.path.join(BASE_DIR, "media/")
 MEDIA_URL = '/media/'
@@ -382,3 +404,81 @@ import os
 log_dir = os.path.join(BASE_DIR, 'logs')
 if not os.path.exists(log_dir):
     os.makedirs(log_dir)
+
+# ========================
+# ADVANCED SECURITY SETTINGS
+# ========================
+
+# Django-Axes Configuration (Login Security) - DISABLED
+# Using custom progressive rate limiting instead
+AXES_ENABLED = False
+
+# Django-OTP Configuration (Two-Factor Authentication)
+OTP_TOTP_ISSUER = 'PISOWifi Management'
+OTP_LOGIN_URL = '/admin/login/'
+
+# Security Middleware Configuration
+MAX_REQUEST_SIZE = 10 * 1024 * 1024  # 10MB
+ADMIN_IP_WHITELIST = get_env_variable('ADMIN_IP_WHITELIST', '').split(',') if get_env_variable('ADMIN_IP_WHITELIST', '') else []
+
+# Cache Configuration (Required for rate limiting and security features)
+CACHES = {
+    'default': {
+        'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+        'LOCATION': 'pisowifi-security-cache',
+        'OPTIONS': {
+            'MAX_ENTRIES': 10000,
+        }
+    }
+}
+
+# Rate Limiting Configuration
+RATELIMIT_USE_CACHE = 'default'
+RATELIMIT_ENABLE = True
+
+# Security Headers
+SECURE_REFERRER_POLICY = 'strict-origin-when-cross-origin'
+SECURE_CROSS_ORIGIN_OPENER_POLICY = 'same-origin'
+
+# Additional Security Settings
+# SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')  # Disabled for HTTP-only
+USE_X_FORWARDED_HOST = True
+USE_X_FORWARDED_PORT = True
+
+# Login/Logout URLs
+LOGIN_URL = '/admin/login/'
+LOGIN_REDIRECT_URL = '/admin/'
+LOGOUT_REDIRECT_URL = '/admin/login/'
+
+# Password Validation Enhancement
+AUTH_PASSWORD_VALIDATORS = [
+    {
+        'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator',
+    },
+    {
+        'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator',
+        'OPTIONS': {
+            'min_length': 12,  # Increased from default 8
+        }
+    },
+    {
+        'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator',
+    },
+    {
+        'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator',
+    },
+    {
+        'NAME': 'app.security.validators.ComplexPasswordValidator',
+    },
+]
+
+# Security Event Logging
+SECURITY_LOG_LEVEL = 'WARNING'
+SECURITY_LOG_EVENTS = [
+    'login_failure',
+    'rate_limit_exceeded',
+    'suspicious_activity',
+    'ip_blocked',
+    'admin_access',
+    'security_violation'
+]

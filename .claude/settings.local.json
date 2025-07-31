@@ -29,7 +29,11 @@
       "Bash(timeout:*)",
       "Bash(git tag:*)",
       "Bash(git describe:*)",
-      "WebFetch(domain:docs.zerotier.com)"
+      "WebFetch(domain:docs.zerotier.com)",
+      "Bash(cp:*)",
+      "Bash(copy:*)",
+      "Bash(chmod:*)",
+      "Bash(set DEV_MODE=True)"
     ],
     "deny": []
   }

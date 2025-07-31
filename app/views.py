@@ -3,6 +3,10 @@ from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse, HttpResponseForbidden, HttpResponse, Http404
 from django.views.decorators.csrf import csrf_protect, ensure_csrf_cookie
 from django.utils.decorators import method_decorator
+from app.security.decorators import (
+    high_security, voucher_rate_limit, payment_rate_limit, 
+    portal_rate_limit, require_local_ip, log_security_event
+)
 from django.shortcuts import render, redirect
 from django.views import View
 from django.views.generic.edit import UpdateView
@@ -1268,6 +1272,7 @@ def getDeviceInfo(request):
 
 
 @method_decorator(ensure_csrf_cookie, name='dispatch')
+@method_decorator(portal_rate_limit(), name='dispatch')
 class Portal(View):
     template_name = 'captive.html'
     
@@ -1751,6 +1756,8 @@ class SlotUpdate(View):
             raise Http404("Page not found")
 
 @method_decorator(csrf_protect, name='dispatch')
+@method_decorator(payment_rate_limit(), name='dispatch')
+@method_decorator(log_security_event('payment_access'), name='dispatch')
 class Pay(View):
     template_name = 'pay.html'
     
@@ -2083,6 +2090,8 @@ class GenerateVoucher(View):
 
 class Redeem(View):
 
+    @method_decorator(voucher_rate_limit())
+    @method_decorator(log_security_event('voucher_redeem'))
     def post(self, request):
         if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
             voucher_code = request.POST.get('voucher', None)
@@ -2224,6 +2233,8 @@ class Redeem(View):
 
 class Sweep(View):
 
+    @method_decorator(require_local_ip)
+    @method_decorator(log_security_event('system_sweep'))
     def get(self, request):
         if request.headers.get('X-Requested-With') == 'XMLHttpRequest' and request.META['REMOTE_ADDR'] in local_ip:
             models.Device.objects.filter(pk=1).update(Sync_Time=timezone.now())

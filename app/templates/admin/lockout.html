@@ -1,0 +1,144 @@
+{% extends "admin/base.html" %}
+{% load i18n %}
+
+{% block title %}Account Locked - {{ site_title|default:"PISOWifi Admin" }}{% endblock %}
+
+{% block branding %}
+<h1 id="site-name">
+    <a href="{% url 'admin:index' %}">
+        {{ site_header|default:"PISOWifi Administration" }}
+    </a>
+</h1>
+{% endblock %}
+
+{% block content %}
+<div class="login">
+    <div class="form-row">
+        <div class="errors">
+            <h2>{% trans "Account Temporarily Locked" %}</h2>
+            
+            <div class="alert alert-danger" style="padding: 15px; margin: 20px 0; background-color: #f8d7da; border: 1px solid #f5c6cb; border-radius: 4px; color: #721c24;">
+                <h4 style="margin-top: 0;">🔒 Security Protection Activated</h4>
+                
+                <p><strong>{{ lockout_message }}</strong></p>
+                
+                {% if retry_message %}
+                <p>{{ retry_message }}</p>
+                {% endif %}
+                
+                <hr style="border-color: #f1aeb5;">
+                
+                <h5>Why was my account locked?</h5>
+                <ul style="margin-bottom: 15px;">
+                    <li>Multiple failed login attempts were detected</li>
+                    <li>This is a security measure to protect against unauthorized access</li>
+                    <li>Your account will be automatically unlocked after the cooldown period</li>
+                </ul>
+                
+                <h5>What can I do?</h5>
+                <ul style="margin-bottom: 15px;">
+                    <li>Wait for the lockout period to expire (1 hour)</li>
+                    <li>Ensure you're using the correct username and password</li>
+                    <li>Check if Caps Lock is enabled</li>
+                    <li>Contact your system administrator if you need immediate access</li>
+                </ul>
+                
+                {% if contact_admin %}
+                <div style="background-color: #fff3cd; border: 1px solid #ffeaa7; padding: 10px; border-radius: 4px; margin-top: 15px;">
+                    <strong>Need Help?</strong><br>
+                    If you believe this lockout is in error or need immediate access, 
+                    please contact your system administrator.
+                </div>
+                {% endif %}
+            </div>
+            
+            <div style="text-align: center; margin-top: 30px;">
+                <a href="{% url 'admin:login' %}" class="button default" style="text-decoration: none; padding: 10px 20px; background-color: #417690; color: white; border-radius: 4px;">
+                    ← Back to Login
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.login {
+    background: #f8f8f8;
+    padding: 40px;
+}
+
+.login .form-row {
+    max-width: 600px;
+    margin: 0 auto;
+}
+
+.errors h2 {
+    text-align: center;
+    color: #ba2121;
+    margin-bottom: 30px;
+    font-size: 24px;
+}
+
+.alert {
+    font-size: 14px;
+    line-height: 1.5;
+}
+
+.alert h4 {
+    font-size: 18px;
+    font-weight: bold;
+}
+
+.alert h5 {
+    font-size: 16px;
+    font-weight: bold;
+    color: #721c24;
+    margin-top: 15px;
+    margin-bottom: 8px;
+}
+
+.alert ul {
+    padding-left: 20px;
+}
+
+.alert li {
+    margin-bottom: 5px;
+}
+
+.button {
+    display: inline-block;
+    font-weight: normal;
+    text-align: center;
+    white-space: nowrap;
+    vertical-align: middle;
+    cursor: pointer;
+    border: 1px solid transparent;
+    padding: 0.375rem 0.75rem;
+    font-size: 1rem;
+    line-height: 1.5;
+    border-radius: 0.25rem;
+    transition: color 0.15s ease-in-out, background-color 0.15s ease-in-out, border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+}
+
+.button.default {
+    background-color: #417690;
+    border-color: #417690;
+    color: #fff;
+}
+
+.button.default:hover {
+    background-color: #205067;
+    border-color: #205067;
+    color: #fff;
+    text-decoration: none;
+}
+</style>
+{% endblock %}
+
+{% block footer %}
+<div id="footer">
+    <div style="text-align: center; color: #666; font-size: 12px; margin-top: 20px;">
+        Security incident logged at {{ request.timestamp|default:"" }}
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,71 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block title %}Security Alerts - {{ site_title|default:"PISOWifi Admin" }}{% endblock %}
+
+{% block content %}
+<div class="security-alerts">
+    <h1>🚨 Security Alerts</h1>
+    
+    <div class="filters" style="margin-bottom: 20px;">
+        <a href="{% url 'security:dashboard' %}" class="button">← Back to Dashboard</a>
+    </div>
+    
+    <div class="alerts-container">
+        {% if alerts %}
+            {% for alert in alerts %}
+            <div class="alert-item threat-{{ alert.threat_level|lower }}" style="
+                border: 1px solid #ddd;
+                border-left: 5px solid 
+                {% if alert.threat_level == 'CRITICAL' %}#dc3545
+                {% elif alert.threat_level == 'HIGH' %}#fd7e14
+                {% elif alert.threat_level == 'MEDIUM' %}#ffc107
+                {% else %}#28a745{% endif %};
+                padding: 15px;
+                margin-bottom: 15px;
+                background: #fff;
+                border-radius: 4px;
+            ">
+                <div class="alert-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                    <span class="threat-level" style="
+                        background: 
+                        {% if alert.threat_level == 'CRITICAL' %}#dc3545
+                        {% elif alert.threat_level == 'HIGH' %}#fd7e14
+                        {% elif alert.threat_level == 'MEDIUM' %}#ffc107
+                        {% else %}#28a745{% endif %};
+                        color: white;
+                        padding: 4px 8px;
+                        border-radius: 4px;
+                        font-size: 12px;
+                        font-weight: bold;
+                    ">{{ alert.threat_level }}</span>
+                    <span class="timestamp" style="color: #666; font-size: 14px;">
+                        {{ alert.timestamp|slice:":19" }}
+                    </span>
+                </div>
+                
+                <div class="alert-message" style="font-size: 16px; font-weight: bold; margin-bottom: 8px;">
+                    {{ alert.message }}
+                </div>
+                
+                {% if alert.context %}
+                <div class="alert-context" style="background: #f8f9fa; padding: 10px; border-radius: 4px; font-size: 14px;">
+                    <strong>Context:</strong>
+                    <ul style="margin: 5px 0 0 20px;">
+                        {% for key, value in alert.context.items %}
+                        <li><strong>{{ key|title }}:</strong> {{ value }}</li>
+                        {% endfor %}
+                    </ul>
+                </div>
+                {% endif %}
+            </div>
+            {% endfor %}
+        {% else %}
+            <div class="no-alerts" style="text-align: center; padding: 40px; color: #666;">
+                <h3>No security alerts found</h3>
+                <p>This is good news! Your system appears to be secure.</p>
+            </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

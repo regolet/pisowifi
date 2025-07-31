@@ -1,0 +1,139 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block title %}{{ page_title }} - {{ site_title|default:"PISOWifi Admin" }}{% endblock %}
+
+{% block content %}
+<div class="security-report">
+    <h1>📄 {{ page_title }}</h1>
+    
+    <div class="report-actions" style="margin-bottom: 20px;">
+        <a href="{% url 'security:dashboard' %}" class="button">← Back to Dashboard</a>
+        <a href="?days=1" class="button {% if days == 1 %}default{% endif %}">Last 24 Hours</a>
+        <a href="?days=7" class="button {% if days == 7 %}default{% endif %}">Last 7 Days</a>
+        <a href="?days=30" class="button {% if days == 30 %}default{% endif %}">Last 30 Days</a>
+        <a href="?format=json" class="button">Download JSON</a>
+    </div>
+    
+    {% if error %}
+        <div class="error-message" style="background: #f8d7da; border: 1px solid #f5c6cb; color: #721c24; padding: 15px; border-radius: 4px;">
+            <strong>Error:</strong> {{ error }}
+        </div>
+    {% elif report %}
+        <div class="report-content">
+            <!-- Report Summary -->
+            <div class="report-section" style="background: #fff; border: 1px solid #ddd; padding: 20px; margin-bottom: 20px; border-radius: 4px;">
+                <h2>📊 Summary</h2>
+                <div class="summary-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px;">
+                    {% if report.summary.message %}
+                        <div class="summary-item">
+                            <p>{{ report.summary.message }}</p>
+                        </div>
+                    {% else %}
+                        <div class="summary-item">
+                            <h4>Total Events</h4>
+                            <div class="summary-value" style="font-size: 24px; font-weight: bold; color: #417690;">
+                                {{ report.summary.total_events }}
+                            </div>
+                        </div>
+                        <div class="summary-item">
+                            <h4>Unique IPs</h4>
+                            <div class="summary-value" style="font-size: 24px; font-weight: bold; color: #417690;">
+                                {{ report.summary.unique_ips }}
+                            </div>
+                        </div>
+                    {% endif %}
+                </div>
+                
+                {% if report.summary.threat_distribution %}
+                <div class="threat-distribution" style="margin-top: 20px;">
+                    <h4>Threat Level Distribution</h4>
+                    <div class="threat-bars">
+                        {% for level, count in report.summary.threat_distribution.items %}
+                        <div class="threat-bar" style="display: flex; align-items: center; margin-bottom: 8px;">
+                            <span class="threat-label" style="width: 80px; font-weight: bold;">{{ level }}:</span>
+                            <div class="bar-container" style="flex: 1; background: #f0f0f0; height: 20px; border-radius: 10px; margin: 0 10px; position: relative;">
+                                <div class="bar-fill" style="
+                                    height: 100%;
+                                    border-radius: 10px;
+                                    width: {% widthratio count report.summary.total_events 100 %}%;
+                                    background: 
+                                    {% if level == 'CRITICAL' %}#dc3545
+                                    {% elif level == 'HIGH' %}#fd7e14
+                                    {% elif level == 'MEDIUM' %}#ffc107
+                                    {% else %}#28a745{% endif %};
+                                "></div>
+                            </div>
+                            <span class="count-label" style="width: 40px; text-align: right;">{{ count }}</span>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+            
+            <!-- Most Common Events -->
+            {% if report.summary.most_common_events %}
+            <div class="report-section" style="background: #fff; border: 1px solid #ddd; padding: 20px; margin-bottom: 20px; border-radius: 4px;">
+                <h2>🔍 Most Common Events</h2>
+                <div class="events-list">
+                    {% for event_type, count in report.summary.most_common_events.items %}
+                    <div class="event-item" style="display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #eee;">
+                        <span>{{ event_type|title }}</span>
+                        <span style="font-weight: bold;">{{ count }}</span>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+            
+            <!-- Top Threats -->
+            {% if report.top_threats.ips %}
+            <div class="report-section" style="background: #fff; border: 1px solid #ddd; padding: 20px; margin-bottom: 20px; border-radius: 4px;">
+                <h2>🎯 Top Threatening IPs</h2>
+                <div class="threats-list">
+                    {% for ip, score in report.top_threats.ips %}
+                    <div class="threat-item" style="display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid #eee;">
+                        <span class="ip-address" style="font-family: monospace; font-weight: bold;">{{ ip }}</span>
+                        <div class="threat-score" style="
+                            background: 
+                            {% if score >= 20 %}#dc3545
+                            {% elif score >= 10 %}#fd7e14
+                            {% elif score >= 5 %}#ffc107
+                            {% else %}#28a745{% endif %};
+                            color: white;
+                            padding: 4px 8px;
+                            border-radius: 4px;
+                            font-weight: bold;
+                        ">Score: {{ score }}</div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+            
+            <!-- Recommendations -->
+            {% if report.recommendations %}
+            <div class="report-section" style="background: #fff; border: 1px solid #ddd; padding: 20px; margin-bottom: 20px; border-radius: 4px;">
+                <h2>💡 Security Recommendations</h2>
+                <ul class="recommendations-list" style="list-style-type: none; padding: 0;">
+                    {% for recommendation in report.recommendations %}
+                    <li style="padding: 10px; margin-bottom: 8px; background: #f8f9fa; border-left: 4px solid #417690; border-radius: 4px;">
+                        {{ recommendation }}
+                    </li>
+                    {% endfor %}
+                </ul>
+            </div>
+            {% endif %}
+            
+            <!-- Report Metadata -->
+            <div class="report-metadata" style="background: #f8f9fa; padding: 15px; border-radius: 4px; font-size: 14px; color: #666;">
+                <strong>Report Details:</strong><br>
+                Period: {{ report.period }}<br>
+                Generated: {{ report.generated_at|slice:":19" }}<br>
+                System: PISOWifi Security Monitoring
+            </div>
+        </div>
+    {% endif %}
+</div>
+{% endblock %}
