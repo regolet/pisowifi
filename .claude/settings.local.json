@@ -33,7 +33,12 @@
       "Bash(cp:*)",
       "Bash(copy:*)",
       "Bash(chmod:*)",
-      "Bash(set DEV_MODE=True)"
+      "Bash(set DEV_MODE=True)",
+      "Bash(set)",
+      "Bash(pkill:*)",
+      "Bash(git reset:*)",
+      "Bash(powershell:*)",
+      "Bash(robocopy:*)"
     ],
     "deny": []
   }

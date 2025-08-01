@@ -43,7 +43,6 @@ INSTALLED_APPS = [
     'app',
     'rest_framework',
     # Security apps
-    'axes',  # Advanced login security
     'django_otp',  # Two-factor authentication
     'django_otp.plugins.otp_totp',
     'django_otp.plugins.otp_static',
