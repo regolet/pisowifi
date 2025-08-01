@@ -4,6 +4,7 @@ import requests
 import zipfile
 import shutil
 import subprocess
+import sys
 from datetime import datetime, timedelta, timezone as dt_timezone
 from django.utils import timezone
 from django.conf import settings
@@ -196,6 +197,15 @@ class UpdateInstallService:
         self.backup_path = os.path.join(settings.BASE_DIR, 'backups')
         self.temp_path = os.path.join(settings.BASE_DIR, 'temp', 'updates')
         self.installation_log = []
+        self.auto_reload_active = self._check_auto_reload()
+    
+    def _check_auto_reload(self):
+        """Check if Django auto-reload is active"""
+        # Check if we're running with runserver
+        if 'runserver' in sys.argv:
+            # Check if --noreload flag is present
+            return '--noreload' not in sys.argv
+        return False
     
     def _log(self, message, level='INFO'):
         timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
@@ -247,6 +257,19 @@ class UpdateInstallService:
         """Install the downloaded update"""
         try:
             self._log("Starting installation process")
+            
+            # Check if auto-reload is active
+            if self.auto_reload_active and settings.DEBUG:
+                error_msg = (
+                    "Cannot install update while Django auto-reload is active. "
+                    "Please restart the server with: python manage.py runserver 3000 --noreload"
+                )
+                self._log(error_msg, "ERROR")
+                self.update.Status = 'failed'
+                self.update.Error_Message = error_msg
+                self.update.save()
+                return {'status': 'error', 'message': error_msg, 'requires_noreload': True}
+            
             self.update.Status = 'installing'
             self.update.Progress = 0
             self.update.Started_At = timezone.now()  # Ensure we record start time
@@ -336,6 +359,12 @@ class UpdateInstallService:
     
     def _copy_update_files(self, source_dir):
         """Copy update files to project directory"""
+        # Check if running in development with auto-reload
+        if settings.DEBUG:
+            self._log("WARNING: Django auto-reload is active. Server may restart during update.", "WARNING")
+            self._log("This will cause session loss and may interrupt the update process.", "WARNING")
+            self._log("STRONGLY RECOMMENDED: Run server with --noreload flag during updates.", "WARNING")
+        
         # Files/directories to exclude from copying
         exclude_patterns = [
             '.git',
@@ -350,7 +379,8 @@ class UpdateInstallService:
             'static/background/'
         ]
         
-        copied_files = 0
+        # First, prepare all files to copy (atomic preparation)
+        files_to_copy = []
         for root, dirs, files in os.walk(source_dir):
             # Skip excluded directories
             dirs[:] = [d for d in dirs if not any(d.startswith(pattern.rstrip('/*')) for pattern in exclude_patterns)]
@@ -364,14 +394,51 @@ class UpdateInstallService:
                 rel_path = os.path.relpath(src_file, source_dir)
                 dst_file = os.path.join(settings.BASE_DIR, rel_path)
                 
-                # Create directory if it doesn't exist
-                os.makedirs(os.path.dirname(dst_file), exist_ok=True)
-                
-                # Copy file
-                shutil.copy2(src_file, dst_file)
-                copied_files += 1
+                files_to_copy.append((src_file, dst_file))
         
-        self._log(f"Copied {copied_files} files to project directory")
+        self._log(f"Prepared {len(files_to_copy)} files for copying")
+        
+        # Create staging directory for atomic update
+        staging_dir = os.path.join(self.temp_path, f"staging_{self.update.Version_Number}")
+        if os.path.exists(staging_dir):
+            shutil.rmtree(staging_dir)
+        os.makedirs(staging_dir, exist_ok=True)
+        
+        # Copy all files to staging first
+        self._log("Copying files to staging directory...")
+        for i, (src_file, dst_file) in enumerate(files_to_copy):
+            staging_file = os.path.join(staging_dir, os.path.relpath(dst_file, settings.BASE_DIR))
+            os.makedirs(os.path.dirname(staging_file), exist_ok=True)
+            shutil.copy2(src_file, staging_file)
+            
+            # Update progress (50% to 70% of total progress)
+            if i % 50 == 0:
+                copy_progress = 50 + int((i / len(files_to_copy)) * 20)
+                self.update.Progress = copy_progress
+                self.update.save(update_fields=['Progress'])
+        
+        self._log("All files staged successfully")
+        
+        # Now copy from staging to actual location (faster, more atomic)
+        self._log("Applying update files from staging...")
+        copied_files = 0
+        for src_file, dst_file in files_to_copy:
+            staging_file = os.path.join(staging_dir, os.path.relpath(dst_file, settings.BASE_DIR))
+            
+            # Create directory if it doesn't exist
+            os.makedirs(os.path.dirname(dst_file), exist_ok=True)
+            
+            # Copy file from staging
+            shutil.copy2(staging_file, dst_file)
+            copied_files += 1
+        
+        self._log(f"Successfully copied {copied_files} files to project directory")
+        
+        # Clean up staging directory
+        try:
+            shutil.rmtree(staging_dir)
+        except Exception as e:
+            self._log(f"Failed to clean up staging directory: {e}", "WARNING")
     
     def _run_post_install_tasks(self):
         """Run post-installation tasks"""

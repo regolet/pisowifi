@@ -21,7 +21,7 @@
             'Content-Type': 'application/json',
         },
     })
-    .then(response => response.json())
+    .then(handleJsonResponse)
     .then(data => {
         hideLoadingOverlay();
         if (data.status === 'success') {
@@ -37,8 +37,7 @@
     })
     .catch(error => {
         hideLoadingOverlay();
-        showNotification('Network error while checking for updates', 'error');
-        console.error('Error:', error);
+        handleFetchError(error, 'Network error while checking for updates');
     });
 }
 
@@ -55,7 +54,7 @@
             'Content-Type': 'application/json',
         },
     })
-    .then(response => response.json())
+    .then(handleJsonResponse)
     .then(data => {
         hideLoadingOverlay();
         if (data.status === 'success') {
@@ -68,9 +67,8 @@
     })
     .catch(error => {
         hideLoadingOverlay();
-        showNotification('Network error while starting download', 'error');
+        handleFetchError(error, 'Network error while starting download');
         updateDownloadButtonState(updateId, 'error');
-        console.error('Error:', error);
     });
 }
 
@@ -83,7 +81,7 @@
             'Content-Type': 'application/json',
         },
     })
-    .then(response => response.json())
+    .then(handleJsonResponse)
     .then(data => {
         if (data.status === 'success') {
             showNotification('Download paused', 'info');
@@ -94,7 +92,7 @@
 
 // Install update
     function installUpdate(updateId) {
-    if (!confirm('Are you sure you want to install this update? The system will be temporarily unavailable.')) {
+    if (!confirm('Are you sure you want to install this update? The system will be temporarily unavailable.\n\nNOTE: During installation, the server may restart which will log you out. This is normal - just log back in after a few moments.')) {
         return;
     }
     
@@ -108,7 +106,7 @@
             'Content-Type': 'application/json',
         },
     })
-    .then(response => response.json())
+    .then(handleJsonResponse)
     .then(data => {
         if (data.status === 'success') {
             showNotification('Update installation started', 'success');
@@ -116,14 +114,22 @@
         } else {
             hideLoadingOverlay();
             hideTerminal();
-            showNotification('Error installing update: ' + data.message, 'error');
+            if (data.requires_noreload) {
+                alert('IMPORTANT: Update cannot be installed while auto-reload is active!\n\n' +
+                      'Please follow these steps:\n\n' +
+                      '1. Stop the server (Ctrl+C in terminal)\n' +
+                      '2. Restart with: python manage.py runserver 3000 --noreload\n' +
+                      '3. Try the installation again\n\n' +
+                      'This prevents the server from restarting mid-update.');
+            } else {
+                showNotification('Error installing update: ' + data.message, 'error');
+            }
         }
     })
     .catch(error => {
         hideLoadingOverlay();
         hideTerminal();
-        showNotification('Network error while installing update', 'error');
-        console.error('Error:', error);
+        handleFetchError(error, 'Network error while installing update');
     });
 }
 
@@ -142,7 +148,7 @@
             'Content-Type': 'application/json',
         },
     })
-    .then(response => response.json())
+    .then(handleJsonResponse)
     .then(data => {
         hideLoadingOverlay();
         if (data.status === 'success') {
@@ -174,7 +180,7 @@
             'Content-Type': 'application/json',
         },
     })
-    .then(response => response.json())
+    .then(handleJsonResponse)
     .then(data => {
         hideLoadingOverlay();
         if (data.status === 'success') {
@@ -186,8 +192,7 @@
     })
     .catch(error => {
         hideLoadingOverlay();
-        showNotification('Network error while removing update', 'error');
-        console.error('Error:', error);
+        handleFetchError(error, 'Network error while removing update');
     });
 }
 
@@ -207,7 +212,7 @@
             'Content-Type': 'application/json',
         },
     })
-    .then(response => response.json())
+    .then(handleJsonResponse)
     .then(data => {
         if (data.status === 'success') {
             showNotification('Update repair started', 'success');
@@ -221,8 +226,7 @@
     .catch(error => {
         hideLoadingOverlay();
         hideTerminal();
-        showNotification('Network error while starting repair', 'error');
-        console.error('Error:', error);
+        handleFetchError(error, 'Network error while starting repair');
     });
 }
 
@@ -242,7 +246,7 @@
             'Content-Type': 'application/json',
         },
     })
-    .then(response => response.json())
+    .then(handleJsonResponse)
     .then(data => {
         if (data.status === 'success') {
             showNotification('Update retry started', 'success');
@@ -256,8 +260,7 @@
     .catch(error => {
         hideLoadingOverlay();
         hideTerminal();
-        showNotification('Network error while starting retry', 'error');
-        console.error('Error:', error);
+        handleFetchError(error, 'Network error while starting retry');
     });
 }
 
@@ -281,6 +284,7 @@
         })
         .catch(error => {
             console.error('Progress tracking error:', error);
+            // Don't stop tracking on individual errors, just log them
         });
     }, 2000); // Check every 2 seconds
 }
@@ -293,7 +297,14 @@
             if (!response.ok) {
                 throw new Error(`HTTP ${response.status}: ${response.statusText}`);
             }
-            return response.json();
+            // Check if response is JSON or HTML (login page)
+            const contentType = response.headers.get("content-type");
+            if (contentType && contentType.indexOf("application/json") !== -1) {
+                return response.json();
+            } else {
+                // Likely redirected to login page
+                throw new Error('Session expired - please refresh the page and login again');
+            }
         })
         .then(data => {
             if (data.status === 'error') {
@@ -326,7 +337,12 @@
             stopProgressTracking();
             hideLoadingOverlay();
             hideTerminal();
-            showNotification('Connection error during installation tracking', 'error');
+            if (error.message.includes('Session expired')) {
+                showNotification('Session expired. Please refresh the page and login again.', 'error');
+                setTimeout(() => location.reload(), 3000);
+            } else {
+                showNotification('Connection error during installation tracking', 'error');
+            }
         });
         
         // Also fetch installation logs
@@ -428,6 +444,32 @@
     return cookieValue;
 }
 
+// Helper function to handle JSON responses and detect authentication errors
+function handleJsonResponse(response) {
+    if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
+    // Check if response is JSON or HTML (login page)
+    const contentType = response.headers.get("content-type");
+    if (contentType && contentType.indexOf("application/json") !== -1) {
+        return response.json();
+    } else {
+        // Likely redirected to login page
+        throw new Error('Session expired - please refresh the page and login again');
+    }
+}
+
+// Helper function to handle errors consistently
+function handleFetchError(error, defaultMessage) {
+    console.error('Error:', error);
+    if (error.message && error.message.includes('Session expired')) {
+        showNotification('Session expired. Please refresh the page and login again.', 'error');
+        setTimeout(() => location.reload(), 3000);
+    } else {
+        showNotification(defaultMessage || 'Network error occurred', 'error');
+    }
+}
+
 // Terminal functions
     function showTerminal(updateId) {
     const terminal = document.createElement('div');
@@ -457,7 +499,14 @@
         if (!response.ok) {
             throw new Error(`HTTP ${response.status}: ${response.statusText}`);
         }
-        return response.json();
+        // Check if response is JSON or HTML (login page)
+        const contentType = response.headers.get("content-type");
+        if (contentType && contentType.indexOf("application/json") !== -1) {
+            return response.json();
+        } else {
+            // Likely redirected to login page
+            throw new Error('Session expired - please refresh the page and login again');
+        }
     })
     .then(data => {
         if (data.status === 'success') {
