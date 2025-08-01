@@ -601,9 +601,6 @@ class Device(models.Model):
     Device_ID = models.CharField(max_length=255, null=True, blank=True)
     Ethernet_MAC = models.CharField(max_length=50, null=True, blank=True)
     Device_SN = models.CharField(max_length=50, null=True, blank=True)
-    pub_rsa = models.TextField(null=False, blank=False)
-    ca = models.CharField(max_length=200, unique=True, null=False, blank=False)
-    action = models.IntegerField(default=0)
     Sync_Time = models.DateTimeField(default=timezone.now, null=True, blank=True)
 
     class Meta:

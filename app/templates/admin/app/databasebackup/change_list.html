@@ -12,6 +12,12 @@
 
 {% block object-tools-items %}
     {{ block.super }}
+    <li style="list-style: none; display: inline-block;">
+        <a href="{% url 'admin:app_backupsettings_change' 1 %}" class="btn" 
+           style="background-color: #6f42c1 !important; border: 2px solid #6f42c1 !important; color: white !important; padding: 10px 18px; border-radius: 4px; text-decoration: none !important; margin-right: 10px; font-weight: bold; display: inline-block;">
+            <i class="fas fa-cogs" style="margin-right: 8px;"></i>Settings
+        </a>
+    </li>
     <li style="list-style: none;">
         <a href="#" class="btn btn-success" id="create-full-backup-btn" onclick="createBackup('full'); return false;" 
            style="background-color: #007bff; border-color: #007bff; color: white; padding: 8px 16px; border-radius: 4px; text-decoration: none; margin-left: 5px;">

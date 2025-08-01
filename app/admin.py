@@ -222,7 +222,10 @@ class ClientsAdmin(admin.ModelAdmin):
         
         # Connection status based buttons
         connection_status = obj.Connection_Status
-        time_left_seconds = obj.Time_Left.total_seconds()
+        try:
+            time_left_seconds = obj.Time_Left.total_seconds() if obj.Time_Left else 0
+        except (AttributeError, TypeError):
+            time_left_seconds = 0
         
         if connection_status == 'Connected':
             # Disconnect button
@@ -1271,6 +1274,17 @@ class RatesAdmin(admin.ModelAdmin):
 
 class DeviceAdmin(Singleton, admin.ModelAdmin):
     list_display = ('Device_SN', 'Ethernet_MAC')
+    readonly_fields = ('device_control_buttons',)
+    
+    fieldsets = (
+        ('Device Information', {
+            'fields': ('Device_ID', 'Ethernet_MAC', 'Device_SN', 'Sync_Time')
+        }),
+        ('Device Control', {
+            'fields': ('device_control_buttons',),
+            'description': 'Use these controls to manage device power state.'
+        }),
+    )
 
     def has_add_permission(self, *args, **kwargs):
         return not models.Device.objects.exists()
@@ -1284,6 +1298,276 @@ class DeviceAdmin(Singleton, admin.ModelAdmin):
     def save_model(self, request, obj, form, change):
         messages.add_message(request, messages.INFO, 'Hardware Settings updated successfully.')
         super(DeviceAdmin, self).save_model(request, obj, form, change)
+    
+    def device_control_buttons(self, obj):
+        """Display device control buttons as a readonly field"""
+        return self.get_device_actions_html()
+    
+    device_control_buttons.short_description = ""
+    device_control_buttons.allow_tags = True
+    
+    
+    def get_device_actions_html(self):
+        """Generate HTML for device action buttons"""
+        from django.utils.html import format_html
+        from django.urls import reverse
+        
+        return format_html('''
+            <div style="margin: 20px 0; padding: 15px; background: #f8f9fa; border-radius: 8px; border: 1px solid #dee2e6;">
+                <h3 style="margin: 0 0 15px 0; color: #495057; font-size: 16px; font-weight: 600;">
+                    <i class="fas fa-power-off" style="margin-right: 8px;"></i>Device Control
+                </h3>
+                <p style="margin-bottom: 15px; color: #6c757d;">Control device power state. Use with caution - these actions will affect system availability.</p>
+                
+                <button type="button" onclick="confirmReboot()" 
+                        style="padding: 10px 20px; background-color: #ffc107; color: #212529; border: 2px solid #ffc107; border-radius: 5px; font-weight: 600; margin-right: 10px; cursor: pointer; transition: all 0.3s ease;">
+                    <i class="fas fa-redo" style="margin-right: 8px;"></i>Reboot Device
+                </button>
+                
+                <button type="button" onclick="confirmShutdown()" 
+                        style="padding: 10px 20px; background-color: #dc3545; color: white; border: 2px solid #dc3545; border-radius: 5px; font-weight: 600; cursor: pointer; transition: all 0.3s ease;">
+                    <i class="fas fa-power-off" style="margin-right: 8px;"></i>Shutdown Device
+                </button>
+            </div>
+            
+            <!-- Confirmation Modal for Reboot -->
+            <div id="reboot-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%%; height: 100%%; background: rgba(0,0,0,0.7); z-index: 10000;">
+                <div style="position: absolute; top: 50%%; left: 50%%; transform: translate(-50%%, -50%%); background: white; border-radius: 8px; padding: 30px; width: 400px; max-width: 90vw;">
+                    <h3 style="margin: 0 0 20px 0; color: #ffc107;"><i class="fas fa-exclamation-triangle" style="margin-right: 10px;"></i>Confirm Reboot</h3>
+                    <p style="margin-bottom: 20px;">Are you sure you want to reboot the device? This will restart the system and temporarily interrupt all services.</p>
+                    <div style="display: flex; gap: 15px; justify-content: flex-end;">
+                        <button type="button" onclick="hideRebootModal()" 
+                                style="padding: 8px 20px; background: #6c757d; color: white; border: none; border-radius: 4px; cursor: pointer;">
+                            Cancel
+                        </button>
+                        <button type="button" onclick="executeReboot()" 
+                                style="padding: 8px 20px; background: #ffc107; color: #212529; border: none; border-radius: 4px; cursor: pointer; font-weight: 600;">
+                            <i class="fas fa-redo" style="margin-right: 5px;"></i>Reboot Now
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Confirmation Modal for Shutdown -->
+            <div id="shutdown-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%%; height: 100%%; background: rgba(0,0,0,0.7); z-index: 10000;">
+                <div style="position: absolute; top: 50%%; left: 50%%; transform: translate(-50%%, -50%%); background: white; border-radius: 8px; padding: 30px; width: 400px; max-width: 90vw;">
+                    <h3 style="margin: 0 0 20px 0; color: #dc3545;"><i class="fas fa-exclamation-triangle" style="margin-right: 10px;"></i>Confirm Shutdown</h3>
+                    <p style="margin-bottom: 20px;">Are you sure you want to shutdown the device? This will power off the system completely. You will need physical access to power it back on.</p>
+                    <div style="display: flex; gap: 15px; justify-content: flex-end;">
+                        <button type="button" onclick="hideShutdownModal()" 
+                                style="padding: 8px 20px; background: #6c757d; color: white; border: none; border-radius: 4px; cursor: pointer;">
+                            Cancel
+                        </button>
+                        <button type="button" onclick="executeShutdown()" 
+                                style="padding: 8px 20px; background: #dc3545; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: 600;">
+                            <i class="fas fa-power-off" style="margin-right: 5px;"></i>Shutdown Now
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Success/Error Message Modal -->
+            <div id="result-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%%; height: 100%%; background: rgba(0,0,0,0.7); z-index: 10001;">
+                <div style="position: absolute; top: 50%%; left: 50%%; transform: translate(-50%%, -50%%); background: white; border-radius: 8px; padding: 30px; width: 400px; max-width: 90vw;">
+                    <h3 id="result-title" style="margin: 0 0 20px 0;"></h3>
+                    <p id="result-message" style="margin-bottom: 20px;"></p>
+                    <div style="text-align: center;">
+                        <button type="button" onclick="hideResultModal()" 
+                                style="padding: 8px 20px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer;">
+                            OK
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <script>
+                function confirmReboot() {{
+                    document.getElementById('reboot-modal').style.display = 'block';
+                }}
+
+                function hideRebootModal() {{
+                    document.getElementById('reboot-modal').style.display = 'none';
+                }}
+
+                function confirmShutdown() {{
+                    document.getElementById('shutdown-modal').style.display = 'block';
+                }}
+
+                function hideShutdownModal() {{
+                    document.getElementById('shutdown-modal').style.display = 'none';
+                }}
+
+                function showResultModal(title, message, isSuccess) {{
+                    document.getElementById('result-title').innerHTML = title;
+                    document.getElementById('result-message').innerHTML = message;
+                    document.getElementById('result-title').style.color = isSuccess ? '#28a745' : '#dc3545';
+                    document.getElementById('result-modal').style.display = 'block';
+                }}
+
+                function hideResultModal() {{
+                    document.getElementById('result-modal').style.display = 'none';
+                }}
+
+                function executeReboot() {{
+                    hideRebootModal();
+                    
+                    fetch('{reboot_url}', {{
+                        method: 'POST',
+                        headers: {{
+                            'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value,
+                            'Content-Type': 'application/json',
+                        }},
+                    }})
+                    .then(response => response.json())
+                    .then(data => {{
+                        if (data.status === 'success') {{
+                            showResultModal(
+                                '<i class="fas fa-check-circle" style="margin-right: 10px;"></i>Reboot Initiated',
+                                data.message,
+                                true
+                            );
+                        }} else {{
+                            showResultModal(
+                                '<i class="fas fa-exclamation-circle" style="margin-right: 10px;"></i>Reboot Failed',
+                                data.message,
+                                false
+                            );
+                        }}
+                    }})
+                    .catch(error => {{
+                        showResultModal(
+                            '<i class="fas fa-exclamation-circle" style="margin-right: 10px;"></i>Reboot Failed',
+                            'An error occurred while trying to reboot the device: ' + error.message,
+                            false
+                        );
+                    }});
+                }}
+
+                function executeShutdown() {{
+                    hideShutdownModal();
+                    
+                    fetch('{shutdown_url}', {{
+                        method: 'POST',
+                        headers: {{
+                            'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value,
+                            'Content-Type': 'application/json',
+                        }},
+                    }})
+                    .then(response => response.json())
+                    .then(data => {{
+                        if (data.status === 'success') {{
+                            showResultModal(
+                                '<i class="fas fa-check-circle" style="margin-right: 10px;"></i>Shutdown Initiated',
+                                data.message,
+                                true
+                            );
+                        }} else {{
+                            showResultModal(
+                                '<i class="fas fa-exclamation-circle" style="margin-right: 10px;"></i>Shutdown Failed',
+                                data.message,
+                                false
+                            );
+                        }}
+                    }})
+                    .catch(error => {{
+                        showResultModal(
+                            '<i class="fas fa-exclamation-circle" style="margin-right: 10px;"></i>Shutdown Failed',
+                            'An error occurred while trying to shutdown the device: ' + error.message,
+                            false
+                        );
+                    }});
+                }}
+
+                // Close modals when clicking outside
+                window.onclick = function(event) {{
+                    const rebootModal = document.getElementById('reboot-modal');
+                    const shutdownModal = document.getElementById('shutdown-modal');
+                    const resultModal = document.getElementById('result-modal');
+                    
+                    if (event.target === rebootModal) {{
+                        hideRebootModal();
+                    }}
+                    if (event.target === shutdownModal) {{
+                        hideShutdownModal();
+                    }}
+                    if (event.target === resultModal) {{
+                        hideResultModal();
+                    }}
+                }}
+            </script>
+        ''', 
+        reboot_url=reverse('admin:app_device_reboot'),
+        shutdown_url=reverse('admin:app_device_shutdown')
+        )
+    
+    def get_urls(self):
+        from django.urls import path
+        urls = super().get_urls()
+        custom_urls = [
+            path('reboot/', self.admin_site.admin_view(self.reboot_device_view), name='app_device_reboot'),
+            path('shutdown/', self.admin_site.admin_view(self.shutdown_device_view), name='app_device_shutdown'),
+        ]
+        return custom_urls + urls
+    
+    def reboot_device_view(self, request):
+        from django.http import JsonResponse
+        import subprocess
+        
+        if request.method == 'POST':
+            try:
+                # Execute reboot command
+                subprocess.run(['sudo', 'reboot'], check=True, timeout=10)
+                return JsonResponse({
+                    'status': 'success',
+                    'message': 'Device reboot initiated successfully. System will restart in a few seconds.'
+                })
+            except subprocess.CalledProcessError as e:
+                return JsonResponse({
+                    'status': 'error',
+                    'message': f'Failed to reboot device: {str(e)}'
+                })
+            except subprocess.TimeoutExpired:
+                return JsonResponse({
+                    'status': 'success',
+                    'message': 'Device reboot initiated successfully. System will restart in a few seconds.'
+                })
+            except Exception as e:
+                return JsonResponse({
+                    'status': 'error',
+                    'message': f'Unexpected error: {str(e)}'
+                })
+        
+        return JsonResponse({'status': 'error', 'message': 'Invalid request method'})
+    
+    def shutdown_device_view(self, request):
+        from django.http import JsonResponse
+        import subprocess
+        
+        if request.method == 'POST':
+            try:
+                # Execute shutdown command
+                subprocess.run(['sudo', 'shutdown', '-h', 'now'], check=True, timeout=10)
+                return JsonResponse({
+                    'status': 'success',
+                    'message': 'Device shutdown initiated successfully. System will power off in a few seconds.'
+                })
+            except subprocess.CalledProcessError as e:
+                return JsonResponse({
+                    'status': 'error',
+                    'message': f'Failed to shutdown device: {str(e)}'
+                })
+            except subprocess.TimeoutExpired:
+                return JsonResponse({
+                    'status': 'success',
+                    'message': 'Device shutdown initiated successfully. System will power off in a few seconds.'
+                })
+            except Exception as e:
+                return JsonResponse({
+                    'status': 'error',
+                    'message': f'Unexpected error: {str(e)}'
+                })
+        
+        return JsonResponse({'status': 'error', 'message': 'Invalid request method'})
 
 class VouchersAdmin(admin.ModelAdmin):
     """
@@ -3237,6 +3521,10 @@ class BackupSettingsAdmin(Singleton):
     
     def changelist_view(self, request, extra_context=None):
         return HttpResponseRedirect(reverse('admin:app_backupsettings_change', args=[1]))
+    
+    def has_module_permission(self, request):
+        """Hide from admin menu"""
+        return False
 
 
 class DatabaseBackupAdmin(admin.ModelAdmin):
@@ -3358,6 +3646,7 @@ class DatabaseBackupAdmin(admin.ModelAdmin):
         extra_context.update({
             'title': 'Database Backups',
             'has_add_permission': False,
+            'show_settings_button': True,
         })
         
         return super().changelist_view(request, extra_context=extra_context)

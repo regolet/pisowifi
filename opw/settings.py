@@ -42,10 +42,6 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'app',
     'rest_framework',
-    # Security apps
-    'django_otp',  # Two-factor authentication
-    'django_otp.plugins.otp_totp',
-    'django_otp.plugins.otp_static',
 ]
 
 # Authentication Backends
@@ -62,7 +58,6 @@ MIDDLEWARE = [
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
-    'django_otp.middleware.OTPMiddleware',  # 2FA middleware
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
@@ -164,6 +159,10 @@ JAZZMIN_SETTINGS = {
         'app': []
     },
     
+    # Dashboard icon consistency
+    'default_icon_parents': 'fas fa-chevron-circle-right',
+    'default_icon_children': 'fas fa-circle',
+    
     # User display settings
     'user_avatar': None,
     'show_ui_builder': False,
@@ -203,24 +202,24 @@ JAZZMIN_SETTINGS = {
     'icons': {
         # Authentication
         'auth': 'fas fa-users-cog',
-        'auth.user': 'fas fa-user',
+        'auth.user': 'far fa-user',
         'auth.Group': 'fas fa-users',
         
         # Core PISOWifi Models
-        'app': 'fas fa-wifi',
+        'app': 'fas fa-wifi',  # Keep wifi solid for branding
         'app.Clients': 'fas fa-users',
         'app.Settings': 'fas fa-cog',
         'app.Device': 'fas fa-laptop',
         'app.Network': 'fas fa-network-wired',
-        'app.Whitelist': 'fas fa-check-circle',
+        'app.Whitelist': 'far fa-check-circle',
         'app.Rates': 'fas fa-dollar-sign',
         'app.Vouchers': 'fas fa-ticket-alt',
         
         # Financial Models
-        'app.CoinSlot': 'fas fa-donate',
-        'app.CoinQueue': 'fas fa-coins',
+        'app.CoinSlot': 'fas fa-coins',
+        'app.CoinQueue': 'fas fa-list-ol',
         'app.Ledger': 'fas fa-book',
-        'app.SalesReport': 'fas fa-chart-line',
+        'app.SalesReport': 'fas fa-chart-bar',
         
         # Security & Monitoring Models
         'app.SecuritySettings': 'fas fa-shield-alt',
@@ -231,26 +230,27 @@ JAZZMIN_SETTINGS = {
         'app.DeviceFingerprint': 'fas fa-fingerprint',
         'app.TrafficAnalysis': 'fas fa-chart-area',
         'app.DeviceBehaviorProfile': 'fas fa-user-shield',
-        'app.AdaptiveQoSRule': 'fas fa-traffic-light',
+        'app.AdaptiveQoSRule': 'fas fa-tachometer-alt',
         'app.NetworkIntelligence': 'fas fa-brain',
         
         # System Update Models
-        'app.SystemUpdate': 'fas fa-download',
+        'app.SystemUpdate': 'fas fa-sync-alt',
+        'app.UpdateSettings': 'fas fa-tools',
         
         # Backup & VLAN Models
         'app.BackupSettings': 'fas fa-archive',
-        'app.DatabaseBackup': 'fas fa-database',
+        'app.DatabaseBackup': 'fas fa-hdd',
         'app.VLANSettings': 'fas fa-sitemap',
         
         # ZeroTier Remote Monitoring
         'app.ZeroTierSettings': 'fas fa-satellite-dish',
-        'app.ZeroTierMonitoringData': 'fas fa-chart-line',
         
         # Port Prioritization/QoS
-        'app.PortPrioritization': 'fas fa-layer-group',
+        'app.PortPrioritization': 'fas fa-sort-amount-up',
         
         # Portal Management
         'app.PortalSettings': 'fas fa-desktop',
+        'app.PortalText': 'fas fa-align-left',
     },
     
     # Custom CSS and JS

@@ -19,6 +19,21 @@
     display: block !important;
 }
 
+/* Ensure FontAwesome icons load properly */
+.nav-link i[class*="fa-"],
+.breadcrumb-item i[class*="fa-"] {
+    font-family: "Font Awesome 5 Free" !important;
+}
+
+/* Let FontAwesome handle its own font weights based on fas/far classes */
+.nav-link i.fas[class*="fa-"] {
+    font-weight: 900 !important; /* Solid icons */
+}
+
+.nav-link i.far[class*="fa-"] {
+    font-weight: 400 !important; /* Regular/hollow icons */
+}
+
 /* Dashboard Container */
 .dashboard-wrapper {
     margin: 0;

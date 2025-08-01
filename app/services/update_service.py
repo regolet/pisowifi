@@ -203,8 +203,9 @@ class UpdateInstallService:
         """Check if Django auto-reload is active"""
         # Check if we're running with runserver
         if 'runserver' in sys.argv:
-            # Check if --noreload flag is present
-            return '--noreload' not in sys.argv
+            # With our custom runserver command, auto-reload is disabled by default
+            # Only enabled if --enable-reload flag is explicitly used
+            return '--enable-reload' in sys.argv
         return False
     
     def _log(self, message, level='INFO'):
@@ -262,7 +263,7 @@ class UpdateInstallService:
             if self.auto_reload_active and settings.DEBUG:
                 error_msg = (
                     "Cannot install update while Django auto-reload is active. "
-                    "Please restart the server with: python manage.py runserver 3000 --noreload"
+                    "Please restart the server without the --enable-reload flag: python manage.py runserver 3000"
                 )
                 self._log(error_msg, "ERROR")
                 self.update.Status = 'failed'
@@ -360,10 +361,10 @@ class UpdateInstallService:
     def _copy_update_files(self, source_dir):
         """Copy update files to project directory"""
         # Check if running in development with auto-reload
-        if settings.DEBUG:
+        if settings.DEBUG and self.auto_reload_active:
             self._log("WARNING: Django auto-reload is active. Server may restart during update.", "WARNING")
             self._log("This will cause session loss and may interrupt the update process.", "WARNING")
-            self._log("STRONGLY RECOMMENDED: Run server with --noreload flag during updates.", "WARNING")
+            self._log("STRONGLY RECOMMENDED: Run server without --enable-reload flag during updates.", "WARNING")
         
         # Files/directories to exclude from copying
         exclude_patterns = [
