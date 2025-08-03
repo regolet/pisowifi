@@ -3050,6 +3050,8 @@ class SystemUpdateAdmin(admin.ModelAdmin):
         wrapped_repair = csrf_exempt(staff_member_required(self.repair_update_view))
         wrapped_retry = csrf_exempt(staff_member_required(self.retry_update_view))
         wrapped_session_keepalive = csrf_exempt(staff_member_required(self.session_keepalive_view))
+        wrapped_restart_server = csrf_exempt(staff_member_required(self.restart_server_view))
+        wrapped_server_info = csrf_exempt(staff_member_required(self.server_info_view))
         
         urls = super().get_urls()
         custom_urls = [
@@ -3064,6 +3066,8 @@ class SystemUpdateAdmin(admin.ModelAdmin):
             path('<int:pk>/repair/', wrapped_repair, name='app_systemupdate_repair'),
             path('<int:pk>/retry/', wrapped_retry, name='app_systemupdate_retry'),
             path('session-keep-alive/', wrapped_session_keepalive, name='app_systemupdate_session_keepalive'),
+            path('restart-server/', wrapped_restart_server, name='app_systemupdate_restart_server'),
+            path('server-info/', wrapped_server_info, name='app_systemupdate_server_info'),
         ]
         return custom_urls + urls
     
@@ -3140,22 +3144,11 @@ class SystemUpdateAdmin(admin.ModelAdmin):
             if update.Status != 'ready':
                 return JsonResponse({'status': 'error', 'message': 'Update not ready for installation'})
             
-            # Ensure session exists and extend it for update operation
-            if not request.session.session_key:
-                request.session.create()
-            
-            # Extend session immediately for the update operation (2 hours)
-            from django.contrib.sessions.models import Session
-            from django.utils import timezone
-            from datetime import timedelta
-            try:
-                session = Session.objects.get(session_key=request.session.session_key)
-                session.expire_date = timezone.now() + timedelta(hours=2)
-                session.save()
-                logger.info(f"Extended session for update operation until {session.expire_date}")
-            except Session.DoesNotExist:
-                logger.warning("Session not found, creating new session")
-                request.session.create()
+            # Completely disable session expiration for this admin operation
+            from app.utils.session_utils import disable_session_expiration, make_session_permanent
+            disable_session_expiration(request)
+            make_session_permanent(request)
+            logger.info("Disabled session expiration for update installation")
             
             # Start session keep-alive mechanism
             session_keeper = SessionKeepAlive(request, f"Install-Update-{update.Version_Number}")
@@ -3506,6 +3499,75 @@ class SystemUpdateAdmin(admin.ModelAdmin):
             return JsonResponse({
                 'status': 'error',
                 'message': f'Session keep-alive failed: {str(e)}'
+            })
+    
+    def restart_server_view(self, request):
+        """Manual server restart endpoint"""
+        from django.http import JsonResponse
+        from app.services.server_control_service import request_server_restart
+        import logging
+        logger = logging.getLogger(__name__)
+        
+        if request.method != 'POST':
+            return JsonResponse({'status': 'error', 'message': 'POST required'})
+        
+        try:
+            # Ensure user is authenticated and has admin privileges
+            if not request.user.is_authenticated or not request.user.is_staff:
+                return JsonResponse({'status': 'error', 'message': 'Admin authentication required'})
+            
+            # Get delay from request (default 5 seconds)
+            import json
+            try:
+                data = json.loads(request.body) if request.body else {}
+                delay = int(data.get('delay', 5))
+            except (json.JSONDecodeError, ValueError):
+                delay = 5
+            
+            # Validate delay range
+            if delay < 1 or delay > 60:
+                delay = 5
+            
+            logger.info(f"Manual server restart requested by {request.user.username} with {delay}s delay")
+            
+            # Request the restart
+            result = request_server_restart(delay_seconds=delay)
+            
+            if result['status'] == 'success':
+                logger.info(f"Server restart scheduled successfully")
+            else:
+                logger.error(f"Failed to schedule server restart: {result.get('message')}")
+            
+            return JsonResponse(result)
+            
+        except Exception as e:
+            logger.error(f"Error in restart_server_view: {e}")
+            return JsonResponse({
+                'status': 'error',
+                'message': f'Failed to restart server: {str(e)}'
+            })
+    
+    def server_info_view(self, request):
+        """Get server information endpoint"""
+        from django.http import JsonResponse
+        from app.services.server_control_service import get_server_status
+        import logging
+        logger = logging.getLogger(__name__)
+        
+        try:
+            # Ensure user is authenticated and has admin privileges
+            if not request.user.is_authenticated or not request.user.is_staff:
+                return JsonResponse({'status': 'error', 'message': 'Admin authentication required'})
+            
+            # Get server information
+            result = get_server_status()
+            return JsonResponse(result)
+            
+        except Exception as e:
+            logger.error(f"Error in server_info_view: {e}")
+            return JsonResponse({
+                'status': 'error',
+                'message': f'Failed to get server info: {str(e)}'
             })
 
 

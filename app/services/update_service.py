@@ -349,7 +349,11 @@ class UpdateInstallService:
             settings_obj.save()
             self._log(f"System version updated to {self.update.Version_Number}")
             
-            return {'status': 'success'}
+            # Log recommendation for manual restart
+            self._log("RECOMMENDATION: Consider manually restarting the server to ensure all changes take effect", "INFO")
+            self._log("Use the 'Restart Server' button in the admin interface when ready", "INFO")
+            
+            return {'status': 'success', 'restart_recommended': True}
             
         except Exception as e:
             self._log(f"Installation failed: {str(e)}", "ERROR")
