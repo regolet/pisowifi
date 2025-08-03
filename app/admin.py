@@ -3038,20 +3038,24 @@ class SystemUpdateAdmin(admin.ModelAdmin):
         from django.views.decorators.csrf import csrf_exempt
         from django.contrib.admin.views.decorators import staff_member_required
         
-        # Create properly wrapped views with both authentication and CSRF exemption for all AJAX endpoints
-        wrapped_check_updates = csrf_exempt(staff_member_required(self.check_updates_view))
-        wrapped_download = csrf_exempt(staff_member_required(self.download_update_view))
-        wrapped_install = csrf_exempt(staff_member_required(self.install_update_view))
-        wrapped_rollback = csrf_exempt(staff_member_required(self.rollback_update_view))
-        wrapped_progress = csrf_exempt(staff_member_required(self.progress_view))
-        wrapped_install_progress = csrf_exempt(staff_member_required(self.install_progress_view))
-        wrapped_installation_logs = csrf_exempt(staff_member_required(self.installation_logs_view))
-        wrapped_remove = csrf_exempt(staff_member_required(self.remove_update_view))
-        wrapped_repair = csrf_exempt(staff_member_required(self.repair_update_view))
-        wrapped_retry = csrf_exempt(staff_member_required(self.retry_update_view))
-        # Session keep-alive no longer needed with token auth
-        wrapped_restart_server = csrf_exempt(staff_member_required(self.restart_server_view))
-        wrapped_server_info = csrf_exempt(staff_member_required(self.server_info_view))
+        # Import our custom admin decorator
+        from app.decorators.admin_auth import admin_required_json
+        
+        # Create properly wrapped views with CSRF exemption and token-compatible auth
+        wrapped_check_updates = csrf_exempt(admin_required_json(self.check_updates_view))
+        wrapped_download = csrf_exempt(admin_required_json(self.download_update_view))
+        wrapped_install = csrf_exempt(admin_required_json(self.install_update_view))
+        wrapped_rollback = csrf_exempt(admin_required_json(self.rollback_update_view))
+        wrapped_progress = csrf_exempt(admin_required_json(self.progress_view))
+        wrapped_install_progress = csrf_exempt(admin_required_json(self.install_progress_view))
+        wrapped_installation_logs = csrf_exempt(admin_required_json(self.installation_logs_view))
+        wrapped_remove = csrf_exempt(admin_required_json(self.remove_update_view))
+        wrapped_repair = csrf_exempt(admin_required_json(self.repair_update_view))
+        wrapped_retry = csrf_exempt(admin_required_json(self.retry_update_view))
+        wrapped_session_keepalive = csrf_exempt(admin_required_json(self.session_keepalive_view))
+        wrapped_restart_server = csrf_exempt(admin_required_json(self.restart_server_view))
+        wrapped_server_info = csrf_exempt(admin_required_json(self.server_info_view))
+        wrapped_auth_test = csrf_exempt(admin_required_json(self.auth_test_view))
         
         urls = super().get_urls()
         custom_urls = [
@@ -3065,9 +3069,10 @@ class SystemUpdateAdmin(admin.ModelAdmin):
             path('<int:pk>/remove/', wrapped_remove, name='app_systemupdate_remove'),
             path('<int:pk>/repair/', wrapped_repair, name='app_systemupdate_repair'),
             path('<int:pk>/retry/', wrapped_retry, name='app_systemupdate_retry'),
-            # Session keep-alive endpoint removed - using token auth
+            path('session-keep-alive/', wrapped_session_keepalive, name='app_systemupdate_session_keepalive'),
             path('restart-server/', wrapped_restart_server, name='app_systemupdate_restart_server'),
             path('server-info/', wrapped_server_info, name='app_systemupdate_server_info'),
+            path('auth-test/', wrapped_auth_test, name='app_systemupdate_auth_test'),
         ]
         return custom_urls + urls
     
@@ -3133,6 +3138,7 @@ class SystemUpdateAdmin(admin.ModelAdmin):
     def install_update_view(self, request, pk):
         from django.http import JsonResponse
         from app.services.update_service import UpdateInstallService
+        from app.services.session_manager import create_update_session_context, SessionKeepAlive
         import threading
         import logging
         logger = logging.getLogger(__name__)
@@ -3143,8 +3149,15 @@ class SystemUpdateAdmin(admin.ModelAdmin):
             if update.Status != 'ready':
                 return JsonResponse({'status': 'error', 'message': 'Update not ready for installation'})
             
-            # Token authentication handles everything - no session management needed
-            logger.info("Using token-based authentication for update installation")
+            # Completely disable session expiration for this admin operation
+            from app.utils.session_utils import disable_session_expiration, make_session_permanent
+            disable_session_expiration(request)
+            make_session_permanent(request)
+            logger.info("Disabled session expiration for update installation")
+            
+            # Start session keep-alive mechanism
+            session_keeper = SessionKeepAlive(request, f"Install-Update-{update.Version_Number}")
+            session_keeper.start_keep_alive()
             
             # Start installation in background thread
             def install_in_background():
@@ -3169,6 +3182,9 @@ class SystemUpdateAdmin(admin.ModelAdmin):
                         error_update.save(update_fields=['Status', 'Error_Message'])
                     except:
                         pass
+                finally:
+                    # Stop session keep-alive when done
+                    session_keeper.stop_keep_alive()
             
             thread = threading.Thread(target=install_in_background)
             thread.daemon = True
@@ -3434,10 +3450,61 @@ class SystemUpdateAdmin(admin.ModelAdmin):
                 'message': f'Failed to retry update: {str(e)}'
             })
     
-    # Session keep-alive no longer needed - using token authentication
-    # def session_keepalive_view(self, request):
-    #     """Deprecated - Token auth handles authentication without sessions"""
-    #     pass
+    def session_keepalive_view(self, request):
+        """Keep session alive during long-running update operations"""
+        from django.http import JsonResponse
+        from django.contrib.sessions.models import Session
+        from django.utils import timezone
+        from datetime import timedelta
+        import logging
+        logger = logging.getLogger(__name__)
+        
+        if request.method != 'POST':
+            return JsonResponse({'status': 'error', 'message': 'POST required'})
+        
+        try:
+            # Ensure user is authenticated and has admin privileges
+            if not request.user.is_authenticated or not request.user.is_staff:
+                return JsonResponse({'status': 'error', 'message': 'Authentication required'})
+            
+            # Get current session
+            session_key = request.session.session_key
+            if not session_key:
+                # Create session if it doesn't exist
+                request.session.create()
+                session_key = request.session.session_key
+            
+            # Extend the session
+            try:
+                session = Session.objects.get(session_key=session_key)
+                # Extend session by 1 hour from now
+                session.expire_date = timezone.now() + timedelta(hours=1)
+                session.save()
+                
+                logger.debug(f"Extended session {session_key} until {session.expire_date}")
+                
+                return JsonResponse({
+                    'status': 'success',
+                    'message': 'Session extended',
+                    'expire_date': session.expire_date.isoformat(),
+                    'current_time': timezone.now().isoformat()
+                })
+                
+            except Session.DoesNotExist:
+                # Session doesn't exist, create a new one
+                request.session.create()
+                return JsonResponse({
+                    'status': 'success',
+                    'message': 'New session created',
+                    'session_key': request.session.session_key
+                })
+            
+        except Exception as e:
+            logger.error(f"Session keep-alive error: {e}")
+            return JsonResponse({
+                'status': 'error',
+                'message': f'Session keep-alive failed: {str(e)}'
+            })
     
     def restart_server_view(self, request):
         """Manual server restart endpoint"""
@@ -3506,6 +3573,40 @@ class SystemUpdateAdmin(admin.ModelAdmin):
             return JsonResponse({
                 'status': 'error',
                 'message': f'Failed to get server info: {str(e)}'
+            })
+    
+    def auth_test_view(self, request):
+        """Test authentication endpoint"""
+        from django.http import JsonResponse
+        import logging
+        logger = logging.getLogger(__name__)
+        
+        try:
+            # This method will only be called if the decorator passes
+            # So if we get here, authentication is working
+            
+            auth_info = {
+                'authenticated': request.user.is_authenticated,
+                'username': request.user.username if request.user.is_authenticated else None,
+                'is_staff': request.user.is_staff if request.user.is_authenticated else False,
+                'is_superuser': request.user.is_superuser if request.user.is_authenticated else False,
+                'has_admin_token_auth': getattr(request, 'admin_token_auth', False),
+                'session_key': request.session.session_key if hasattr(request, 'session') else None
+            }
+            
+            logger.info(f"Auth test successful for user {request.user.username}")
+            
+            return JsonResponse({
+                'status': 'success',
+                'message': 'Authentication test passed',
+                'auth_info': auth_info
+            })
+            
+        except Exception as e:
+            logger.error(f"Error in auth_test_view: {e}")
+            return JsonResponse({
+                'status': 'error',
+                'message': f'Auth test failed: {str(e)}'
             })
 
 
