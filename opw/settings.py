@@ -54,8 +54,9 @@ MIDDLEWARE = [
     # 'app.security.middleware.AdvancedSecurityMiddleware',  # Our advanced security - DISABLED
     # 'app.security.middleware.RequestSizeMiddleware',  # Request size limiting - DISABLED
     # 'app.security.middleware.LoginRateLimitMiddleware',  # Simple login rate limiting - DISABLED
-    'django.contrib.sessions.middleware.SessionMiddleware',
-    'app.middleware.admin_session_middleware.AdminSessionPersistenceMiddleware',  # Prevent admin session expiration
+    'app.middleware.admin_token_middleware.AdminTokenAuthMiddleware',  # Token auth runs BEFORE sessions
+    'django.contrib.sessions.middleware.SessionMiddleware',  # Still needed for CSRF and messages
+    'app.middleware.admin_token_middleware.AdminUpdateAuthMiddleware',  # Force auth for updates
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
@@ -77,13 +78,9 @@ SECURE_HSTS_PRELOAD = False
 SESSION_COOKIE_SECURE = False
 CSRF_COOKIE_SECURE = False
 
-# Session Security
-SESSION_COOKIE_HTTPONLY = True
-SESSION_COOKIE_AGE = 86400 * 30  # 30 days - extremely long timeout for admin operations
-SESSION_SAVE_EVERY_REQUEST = True  # Save session on every request to prevent expiration during updates
-SESSION_EXPIRE_AT_BROWSER_CLOSE = False  # Don't expire when browser closes to prevent interruptions
-# Additional session settings for admin persistence
-SESSION_ENGINE = 'django.contrib.sessions.backends.db'  # Use database backend for reliability
+# Token-based authentication - No sessions needed
+# Admin authentication is handled via tokens that last 1 year
+# See app.middleware.admin_token_middleware for implementation
 CSRF_COOKIE_HTTPONLY = True
 
 ROOT_URLCONF = 'opw.urls'

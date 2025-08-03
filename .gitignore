@@ -29,6 +29,7 @@ cid.log
 *.key
 *.pem
 *.p12
+.admin_tokens/
 
 # OS
 .DS_Store

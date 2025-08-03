@@ -3049,7 +3049,7 @@ class SystemUpdateAdmin(admin.ModelAdmin):
         wrapped_remove = csrf_exempt(staff_member_required(self.remove_update_view))
         wrapped_repair = csrf_exempt(staff_member_required(self.repair_update_view))
         wrapped_retry = csrf_exempt(staff_member_required(self.retry_update_view))
-        wrapped_session_keepalive = csrf_exempt(staff_member_required(self.session_keepalive_view))
+        # Session keep-alive no longer needed with token auth
         wrapped_restart_server = csrf_exempt(staff_member_required(self.restart_server_view))
         wrapped_server_info = csrf_exempt(staff_member_required(self.server_info_view))
         
@@ -3065,7 +3065,7 @@ class SystemUpdateAdmin(admin.ModelAdmin):
             path('<int:pk>/remove/', wrapped_remove, name='app_systemupdate_remove'),
             path('<int:pk>/repair/', wrapped_repair, name='app_systemupdate_repair'),
             path('<int:pk>/retry/', wrapped_retry, name='app_systemupdate_retry'),
-            path('session-keep-alive/', wrapped_session_keepalive, name='app_systemupdate_session_keepalive'),
+            # Session keep-alive endpoint removed - using token auth
             path('restart-server/', wrapped_restart_server, name='app_systemupdate_restart_server'),
             path('server-info/', wrapped_server_info, name='app_systemupdate_server_info'),
         ]
@@ -3133,7 +3133,6 @@ class SystemUpdateAdmin(admin.ModelAdmin):
     def install_update_view(self, request, pk):
         from django.http import JsonResponse
         from app.services.update_service import UpdateInstallService
-        from app.services.session_manager import create_update_session_context, SessionKeepAlive
         import threading
         import logging
         logger = logging.getLogger(__name__)
@@ -3144,15 +3143,8 @@ class SystemUpdateAdmin(admin.ModelAdmin):
             if update.Status != 'ready':
                 return JsonResponse({'status': 'error', 'message': 'Update not ready for installation'})
             
-            # Completely disable session expiration for this admin operation
-            from app.utils.session_utils import disable_session_expiration, make_session_permanent
-            disable_session_expiration(request)
-            make_session_permanent(request)
-            logger.info("Disabled session expiration for update installation")
-            
-            # Start session keep-alive mechanism
-            session_keeper = SessionKeepAlive(request, f"Install-Update-{update.Version_Number}")
-            session_keeper.start_keep_alive()
+            # Token authentication handles everything - no session management needed
+            logger.info("Using token-based authentication for update installation")
             
             # Start installation in background thread
             def install_in_background():
@@ -3177,9 +3169,6 @@ class SystemUpdateAdmin(admin.ModelAdmin):
                         error_update.save(update_fields=['Status', 'Error_Message'])
                     except:
                         pass
-                finally:
-                    # Stop session keep-alive when done
-                    session_keeper.stop_keep_alive()
             
             thread = threading.Thread(target=install_in_background)
             thread.daemon = True
@@ -3445,61 +3434,10 @@ class SystemUpdateAdmin(admin.ModelAdmin):
                 'message': f'Failed to retry update: {str(e)}'
             })
     
-    def session_keepalive_view(self, request):
-        """Keep session alive during long-running update operations"""
-        from django.http import JsonResponse
-        from django.contrib.sessions.models import Session
-        from django.utils import timezone
-        from datetime import timedelta
-        import logging
-        logger = logging.getLogger(__name__)
-        
-        if request.method != 'POST':
-            return JsonResponse({'status': 'error', 'message': 'POST required'})
-        
-        try:
-            # Ensure user is authenticated and has admin privileges
-            if not request.user.is_authenticated or not request.user.is_staff:
-                return JsonResponse({'status': 'error', 'message': 'Authentication required'})
-            
-            # Get current session
-            session_key = request.session.session_key
-            if not session_key:
-                # Create session if it doesn't exist
-                request.session.create()
-                session_key = request.session.session_key
-            
-            # Extend the session
-            try:
-                session = Session.objects.get(session_key=session_key)
-                # Extend session by 1 hour from now
-                session.expire_date = timezone.now() + timedelta(hours=1)
-                session.save()
-                
-                logger.debug(f"Extended session {session_key} until {session.expire_date}")
-                
-                return JsonResponse({
-                    'status': 'success',
-                    'message': 'Session extended',
-                    'expire_date': session.expire_date.isoformat(),
-                    'current_time': timezone.now().isoformat()
-                })
-                
-            except Session.DoesNotExist:
-                # Session doesn't exist, create a new one
-                request.session.create()
-                return JsonResponse({
-                    'status': 'success',
-                    'message': 'New session created',
-                    'session_key': request.session.session_key
-                })
-            
-        except Exception as e:
-            logger.error(f"Session keep-alive error: {e}")
-            return JsonResponse({
-                'status': 'error',
-                'message': f'Session keep-alive failed: {str(e)}'
-            })
+    # Session keep-alive no longer needed - using token authentication
+    # def session_keepalive_view(self, request):
+    #     """Deprecated - Token auth handles authentication without sessions"""
+    #     pass
     
     def restart_server_view(self, request):
         """Manual server restart endpoint"""
