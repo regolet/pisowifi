@@ -79,6 +79,7 @@ CSRF_COOKIE_SECURE = False
 # Session Security
 SESSION_COOKIE_HTTPONLY = True
 SESSION_COOKIE_AGE = 28800  # 8 hours - longer timeout for system update operations
+SESSION_SAVE_EVERY_REQUEST = True  # Save session on every request to prevent expiration during updates
 SESSION_EXPIRE_AT_BROWSER_CLOSE = True
 CSRF_COOKIE_HTTPONLY = True
 

@@ -96,8 +96,17 @@
         return;
     }
     
+    // Start session keep-alive to prevent session expiration during update
+    if (window.updateSessionManager) {
+        window.updateSessionManager.startKeepAlive();
+        console.log('Started session keep-alive for update installation');
+    }
+    
     showLoadingOverlay('Installing update... Please do not close this page.');
     showTerminal(updateId);
+    
+    // Dispatch event for session manager
+    document.dispatchEvent(new CustomEvent('updateStarted', { detail: { updateId: updateId } }));
     
     fetch(`/admin/app/systemupdate/${updateId}/install/`, {
         method: 'POST',
@@ -355,6 +364,15 @@
         clearInterval(updateProgressInterval);
         updateProgressInterval = null;
     }
+    
+    // Stop session keep-alive when update is complete
+    if (window.updateSessionManager) {
+        window.updateSessionManager.stopKeepAlive();
+        console.log('Stopped session keep-alive - update operation completed');
+    }
+    
+    // Dispatch event for session manager
+    document.dispatchEvent(new CustomEvent('updateCompleted'));
 }
 
 // Update progress display
