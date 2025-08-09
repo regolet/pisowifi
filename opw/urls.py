@@ -16,10 +16,10 @@ def favicon_view(request):
 urlpatterns = [
     path('app/', include('app.urls')),
     path('admin/login/', admin_login_view, name='admin_login'),  # Custom login with rate limiting
-    path('admin/app/', RedirectView.as_view(url='/admin/', permanent=False), name='admin_app_redirect'),  # Redirect /admin/app/ to dashboard
     path('admin/', admin.site.urls),
     path('app/api/', include('app.api.urls')),
     path('admin/security/', include('app.security.urls')),
+    path('admin/system-info/', include('app.urls.system_info_urls', namespace='system_info')),
     path('favicon.ico', favicon_view, name='favicon'),
     path('', RedirectView.as_view(url='/app/portal')),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

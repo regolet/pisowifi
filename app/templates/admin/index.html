@@ -93,6 +93,31 @@
 .status-online { background-color: #28a745; }
 .status-warning { background-color: #ffc107; }
 .status-offline { background-color: #dc3545; }
+
+/* System Info Widget Styles */
+.progress-mini {
+    width: 100%;
+    height: 8px;
+    background-color: #f0f0f0;
+    border-radius: 4px;
+    overflow: hidden;
+    margin: 4px 0;
+}
+
+.progress-fill-mini {
+    height: 100%;
+    background: linear-gradient(90deg, #28a745, #34ce57);
+    border-radius: 4px;
+    transition: width 0.5s ease, background 0.3s ease;
+}
+
+.progress-fill-mini.warning {
+    background: linear-gradient(90deg, #ffc107, #ffcd39);
+}
+
+.progress-fill-mini.danger {
+    background: linear-gradient(90deg, #dc3545, #e45563);
+}
 .quick-actions {
     display: grid;
     grid-template-columns: repeat(6, 1fr);
@@ -297,23 +322,44 @@
                 {% endfor %}
             </div>
             
-            <!-- System Health -->
+            <!-- System Information -->
             <div class="activity-panel" style="margin-top: 20px;">
-                <h4>System Health</h4>
-                <div class="activity-item">
-                    <span class="status-indicator status-{{ system_health.database }}"></span>
-                    <strong>Database</strong><br>
-                    <small>{{ system_health.database_message }}</small>
+                <h4>System Information</h4>
+                <div class="system-info-widget" id="systemInfoWidget">
+                    <div class="activity-item">
+                        <strong>CPU Usage</strong><br>
+                        <div class="progress-mini">
+                            <div class="progress-fill-mini" id="cpuUsageMini" style="width: 0%"></div>
+                        </div>
+                        <small id="cpuText">Loading...</small>
+                    </div>
+                    <div class="activity-item">
+                        <strong>Memory Usage</strong><br>
+                        <div class="progress-mini">
+                            <div class="progress-fill-mini" id="memoryUsageMini" style="width: 0%"></div>
+                        </div>
+                        <small id="memoryText">Loading...</small>
+                    </div>
+                    <div class="activity-item">
+                        <strong>Disk Usage</strong><br>
+                        <div class="progress-mini">
+                            <div class="progress-fill-mini" id="diskUsageMini" style="width: 0%"></div>
+                        </div>
+                        <small id="diskText">Loading...</small>
+                    </div>
+                    <div class="activity-item">
+                        <strong>Temperature</strong><br>
+                        <small id="temperatureText">Loading...</small>
+                    </div>
+                    <div class="activity-item">
+                        <strong>Uptime</strong><br>
+                        <small id="uptimeText">Loading...</small>
+                    </div>
                 </div>
-                <div class="activity-item">
-                    <span class="status-indicator status-{{ system_health.network }}"></span>
-                    <strong>Network</strong><br>
-                    <small>{{ system_health.network_message }}</small>
-                </div>
-                <div class="activity-item">
-                    <span class="status-indicator status-{{ system_health.security }}"></span>
-                    <strong>Security</strong><br>
-                    <small>{{ system_health.security_message }}</small>
+                <div class="activity-item" style="text-align: center; padding-top: 15px;">
+                    <a href="{% url 'system_info:dashboard' %}" class="btn btn-sm btn-outline-primary">
+                        <i class="fas fa-chart-area"></i> View Details
+                    </a>
                 </div>
             </div>
         </div>
@@ -407,6 +453,82 @@ const clientChart = new Chart(clientCtx, {
             }
         }
     }
+});
+
+// System Information Auto-Update
+function updateSystemInfo() {
+    fetch('{% url "system_info:api" %}')
+        .then(response => response.json())
+        .then(data => {
+            // Update CPU
+            const cpuFill = document.getElementById('cpuUsageMini');
+            const cpuText = document.getElementById('cpuText');
+            if (cpuFill && cpuText) {
+                cpuFill.style.width = data.cpu.usage + '%';
+                cpuText.textContent = data.cpu.usage + '% (' + data.cpu.physical_cores + ' cores)';
+                updateMiniProgressColor(cpuFill, data.cpu.usage);
+            }
+
+            // Update Memory
+            const memoryFill = document.getElementById('memoryUsageMini');
+            const memoryText = document.getElementById('memoryText');
+            if (memoryFill && memoryText) {
+                memoryFill.style.width = data.memory.used_percent + '%';
+                memoryText.textContent = data.memory.used_percent + '% (' + data.memory.used_gb + 'GB / ' + data.memory.total_gb + 'GB)';
+                updateMiniProgressColor(memoryFill, data.memory.used_percent);
+            }
+
+            // Update Disk
+            const diskFill = document.getElementById('diskUsageMini');
+            const diskText = document.getElementById('diskText');
+            if (diskFill && diskText) {
+                diskFill.style.width = data.disk.used_percent + '%';
+                diskText.textContent = data.disk.used_percent + '% (' + data.disk.free_gb + 'GB free)';
+                updateMiniProgressColor(diskFill, data.disk.used_percent);
+            }
+
+            // Update Temperature
+            const temperatureText = document.getElementById('temperatureText');
+            if (temperatureText) {
+                if (data.temperature && data.temperature.current) {
+                    temperatureText.textContent = data.temperature.current.toFixed(1) + '°C';
+                } else {
+                    temperatureText.textContent = 'N/A';
+                }
+            }
+
+            // Update Uptime
+            const uptimeText = document.getElementById('uptimeText');
+            if (uptimeText) {
+                uptimeText.textContent = data.uptime.days + 'd ' + data.uptime.hours + 'h ' + data.uptime.minutes + 'm';
+            }
+        })
+        .catch(error => {
+            console.error('Error fetching system info:', error);
+            // Fallback to show loading state
+            const elements = ['cpuText', 'memoryText', 'diskText', 'temperatureText', 'uptimeText'];
+            elements.forEach(id => {
+                const element = document.getElementById(id);
+                if (element && element.textContent === 'Loading...') {
+                    element.textContent = 'Error loading data';
+                }
+            });
+        });
+}
+
+function updateMiniProgressColor(element, percentage) {
+    element.classList.remove('warning', 'danger');
+    if (percentage >= 90) {
+        element.classList.add('danger');
+    } else if (percentage >= 70) {
+        element.classList.add('warning');
+    }
+}
+
+// Update system info immediately and then every 10 seconds
+document.addEventListener('DOMContentLoaded', function() {
+    updateSystemInfo();
+    setInterval(updateSystemInfo, 10000);
 });
 
 // Auto-refresh dashboard every 30 seconds

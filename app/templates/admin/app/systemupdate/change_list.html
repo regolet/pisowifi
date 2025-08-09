@@ -8,8 +8,6 @@
     <link rel="stylesheet" href="{% static 'admin/css/system_update.css' %}">
     <link rel="stylesheet" href="{% static 'vendors/fontawesome-free-5.1.0-web/css/all.css' %}">
     <script src="{% static 'admin/js/system_update.js' %}"></script>
-    <script src="{% static 'admin/js/server_control.js' %}"></script>
-    <!-- Session manager removed - using token authentication -->
 {% endblock %}
 
 {% block object-tools-items %}
@@ -22,9 +20,6 @@
         <i class="fas fa-cog" style="margin-right: 5px;"></i>Update Settings
     </a>
     {% endif %}
-    <a href="#" class="btn btn-warning" id="restart-server-btn" onclick="showRestartServerDialog(); return false;" style="background-color: #fd7e14; border-color: #fd7e14; color: white; padding: 8px 16px; border-radius: 4px; text-decoration: none; margin-left: 5px;">
-        <i class="fas fa-power-off" style="margin-right: 5px;"></i>Restart Server
-    </a>
 {% endblock %}
 
 {% block content %}

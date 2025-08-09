@@ -42,6 +42,10 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'app',
     'rest_framework',
+    # Security apps
+    'django_otp',  # Two-factor authentication
+    'django_otp.plugins.otp_totp',
+    'django_otp.plugins.otp_static',
 ]
 
 # Authentication Backends
@@ -54,12 +58,11 @@ MIDDLEWARE = [
     # 'app.security.middleware.AdvancedSecurityMiddleware',  # Our advanced security - DISABLED
     # 'app.security.middleware.RequestSizeMiddleware',  # Request size limiting - DISABLED
     # 'app.security.middleware.LoginRateLimitMiddleware',  # Simple login rate limiting - DISABLED
-    'app.middleware.admin_token_middleware.AdminTokenAuthMiddleware',  # Token auth runs BEFORE sessions
-    'django.contrib.sessions.middleware.SessionMiddleware',  # Still needed for CSRF and messages
-    'app.middleware.admin_token_middleware.AdminUpdateAuthMiddleware',  # Force auth for updates
+    'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
+    'django_otp.middleware.OTPMiddleware',  # 2FA middleware
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
@@ -78,9 +81,10 @@ SECURE_HSTS_PRELOAD = False
 SESSION_COOKIE_SECURE = False
 CSRF_COOKIE_SECURE = False
 
-# Token-based authentication - No sessions needed
-# Admin authentication is handled via tokens that last 1 year
-# See app.middleware.admin_token_middleware for implementation
+# Session Security
+SESSION_COOKIE_HTTPONLY = True
+SESSION_COOKIE_AGE = 28800  # 8 hours - longer timeout for system update operations
+SESSION_EXPIRE_AT_BROWSER_CLOSE = True
 CSRF_COOKIE_HTTPONLY = True
 
 ROOT_URLCONF = 'opw.urls'
@@ -160,10 +164,6 @@ JAZZMIN_SETTINGS = {
         'app': []
     },
     
-    # Dashboard icon consistency
-    'default_icon_parents': 'fas fa-chevron-circle-right',
-    'default_icon_children': 'fas fa-circle',
-    
     # User display settings
     'user_avatar': None,
     'show_ui_builder': False,
@@ -203,24 +203,24 @@ JAZZMIN_SETTINGS = {
     'icons': {
         # Authentication
         'auth': 'fas fa-users-cog',
-        'auth.user': 'far fa-user',
+        'auth.user': 'fas fa-user',
         'auth.Group': 'fas fa-users',
         
         # Core PISOWifi Models
-        'app': 'fas fa-wifi',  # Keep wifi solid for branding
+        'app': 'fas fa-wifi',
         'app.Clients': 'fas fa-users',
         'app.Settings': 'fas fa-cog',
         'app.Device': 'fas fa-laptop',
         'app.Network': 'fas fa-network-wired',
-        'app.Whitelist': 'far fa-check-circle',
+        'app.Whitelist': 'fas fa-check-circle',
         'app.Rates': 'fas fa-dollar-sign',
         'app.Vouchers': 'fas fa-ticket-alt',
         
         # Financial Models
-        'app.CoinSlot': 'fas fa-coins',
-        'app.CoinQueue': 'fas fa-list-ol',
+        'app.CoinSlot': 'fas fa-donate',
+        'app.CoinQueue': 'fas fa-coins',
         'app.Ledger': 'fas fa-book',
-        'app.SalesReport': 'fas fa-chart-bar',
+        'app.SalesReport': 'fas fa-chart-line',
         
         # Security & Monitoring Models
         'app.SecuritySettings': 'fas fa-shield-alt',
@@ -231,27 +231,26 @@ JAZZMIN_SETTINGS = {
         'app.DeviceFingerprint': 'fas fa-fingerprint',
         'app.TrafficAnalysis': 'fas fa-chart-area',
         'app.DeviceBehaviorProfile': 'fas fa-user-shield',
-        'app.AdaptiveQoSRule': 'fas fa-tachometer-alt',
+        'app.AdaptiveQoSRule': 'fas fa-traffic-light',
         'app.NetworkIntelligence': 'fas fa-brain',
         
         # System Update Models
-        'app.SystemUpdate': 'fas fa-sync-alt',
-        'app.UpdateSettings': 'fas fa-tools',
+        'app.SystemUpdate': 'fas fa-download',
         
         # Backup & VLAN Models
         'app.BackupSettings': 'fas fa-archive',
-        'app.DatabaseBackup': 'fas fa-hdd',
+        'app.DatabaseBackup': 'fas fa-database',
         'app.VLANSettings': 'fas fa-sitemap',
         
         # ZeroTier Remote Monitoring
         'app.ZeroTierSettings': 'fas fa-satellite-dish',
+        'app.ZeroTierMonitoringData': 'fas fa-chart-line',
         
         # Port Prioritization/QoS
-        'app.PortPrioritization': 'fas fa-sort-amount-up',
+        'app.PortPrioritization': 'fas fa-layer-group',
         
         # Portal Management
         'app.PortalSettings': 'fas fa-desktop',
-        'app.PortalText': 'fas fa-align-left',
     },
     
     # Custom CSS and JS

@@ -155,6 +155,12 @@ class Clients(models.Model):
     class Meta:
         verbose_name = 'Client'
         verbose_name_plural = 'Clients'
+        indexes = [
+            models.Index(fields=['MAC_Address']),
+            models.Index(fields=['Expire_On']),
+            models.Index(fields=['Date_Created']),
+            models.Index(fields=['Validity_Expires_On']),
+        ]
 
     def __str__(self):
         return str(self.IP_Address) + ' | ' + str(self.MAC_Address)
@@ -194,6 +200,10 @@ class Ledger(models.Model):
     class Meta:
         verbose_name = 'Ledger'
         verbose_name_plural = 'Ledger'
+        indexes = [
+            models.Index(fields=['Date']),
+            models.Index(fields=['Client']),
+        ]
 
     def __str__(self):
         return 'Transaction no: ' + str(self.pk)

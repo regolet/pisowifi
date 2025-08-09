@@ -38,7 +38,12 @@
       "Bash(pkill:*)",
       "Bash(git reset:*)",
       "Bash(powershell:*)",
-      "Bash(robocopy:*)"
+      "Bash(robocopy:*)",
+      "Bash(taskkill:*)",
+      "Bash(true)",
+      "Bash(\"venv/Scripts/activate\")",
+      "Bash(mv:*)",
+      "Bash(git rm:*)"
     ],
     "deny": []
   }
