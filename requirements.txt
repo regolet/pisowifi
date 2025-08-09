@@ -1,29 +1,29 @@
-# Core Django and Web Framework
-Django>=4.2.16,<5.0  # LTS version with security patches
-djangorestframework>=3.15.2
+# OJO PISOWifi Requirements
+# Core Django framework and dependencies
 
-# Security and Cryptography
-cryptography>=41.0.0
-requests>=2.32.4
-python-decouple>=3.8  # For environment variable management
-
-# Database - Using SQLite (default)
-
-# Media handling
-Pillow>=10.4.0
-
-# Admin Interface
+django>=5.0.0
+djangorestframework>=3.14.0
 django-jazzmin>=2.6.0
+django-cors-headers>=4.0.0
 
-# Utilities
-getmac>=0.9.5
-celery>=5.3.6  # For background tasks
+# System monitoring and utilities
+psutil>=5.9.0
 
-# Development and Security
-django-environ>=0.11.2  # Environment management
-django-ratelimit>=4.1.0  # Rate limiting
-django-cors-headers>=4.3.1  # CORS handling
+# Configuration management
+python-decouple>=3.6
 
-# Production server (optional)
-gunicorn>=21.2.0
-whitenoise>=6.6.0  # Static file serving
+# Image processing (for admin interface)
+pillow>=9.0.0
+
+# Database support (optional - SQLite is built-in)
+# Uncomment below if you want to use PostgreSQL or MySQL
+# psycopg2-binary>=2.9.0  # For PostgreSQL
+# mysqlclient>=2.1.0      # For MySQL
+
+# Additional utilities
+requests>=2.28.0
+python-dateutil>=2.8.0
+
+# Development and debugging (optional)
+# django-debug-toolbar>=3.2.0
+# django-extensions>=3.1.0
