@@ -75,8 +75,8 @@ class OrangePiPISOWifiSetup:
                     if_name = parts[1].split('@')[0]
                     interfaces[if_name] = line
             
-            # Detect built-in ethernet (usually end0, eth0, or similar)
-            for name in ['end0', 'eth0', 'enp0s3']:
+            # Detect built-in ethernet (usually en0, end0, eth0, or similar)
+            for name in ['en0', 'end0', 'eth0', 'enp0s3']:
                 if name in interfaces:
                     self.builtin_interface = name
                     break
@@ -181,18 +181,24 @@ iface {self.usb_interface} inet static
         # Create virtual environment
         self.run_command(f'python3 -m venv {self.venv_dir}', 'Creating virtual environment')
         
-        # Install Python packages
+        # Install Python packages from requirements.txt (tested and working versions)
         pip_cmd = f'{self.venv_dir}/bin/pip'
-        packages = [
-            'django>=5.0.0', 'psutil>=5.9.0', 'djangorestframework>=3.14.0',
-            'django-jazzmin>=2.6.0', 'python-decouple>=3.6', 
-            'django-cors-headers>=4.0.0', 'pillow>=9.0.0', 'requests>=2.28.0'
-        ]
         
-        self.run_command(f'{pip_cmd} install --upgrade pip')
+        self.run_command(f'{pip_cmd} install --upgrade pip', 'Upgrading pip')
         
-        for package in packages:
-            self.run_command(f'{pip_cmd} install {package}', f'Installing {package.split(">=")[0]}')
+        # Install from requirements.txt if it exists, otherwise install core packages
+        requirements_file = self.base_dir / 'requirements.txt'
+        if requirements_file.exists():
+            self.run_command(f'{pip_cmd} install -r {requirements_file}', 'Installing packages from requirements.txt')
+        else:
+            # Fallback to core packages if requirements.txt doesn't exist
+            core_packages = [
+                'Django==4.2.23', 'djangorestframework==3.16.0', 'django-jazzmin==3.0.1',
+                'django-cors-headers==4.7.0', 'python-decouple==3.8', 'Pillow==11.3.0',
+                'requests==2.32.4', 'gunicorn==23.0.0'
+            ]
+            for package in core_packages:
+                self.run_command(f'{pip_cmd} install {package}', f'Installing {package.split("==")[0]}')
         
         self.print_success("Python environment ready")
         return True
