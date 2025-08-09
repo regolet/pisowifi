@@ -48,7 +48,7 @@ class OrangePiPISOWifiSetup:
     def print_error(self, message):
         print(f"{Colors.RED}❌ {message}{Colors.END}")
 
-    def run_command(self, command, description=None):
+    def run_command(self, command, description=None, critical=True):
         if description:
             print(f"   {description}...")
         try:
@@ -57,7 +57,12 @@ class OrangePiPISOWifiSetup:
             return result.stdout.strip()
         except subprocess.CalledProcessError as e:
             if description:
-                print(f"   Warning: {description} failed, continuing...")
+                if critical:
+                    self.print_error(f"{description} failed!")
+                    print(f"   Error: {e.stderr if e.stderr else str(e)}")
+                    return False
+                else:
+                    print(f"   Warning: {description} failed, continuing...")
             return None
 
     def detect_interfaces(self):
@@ -120,13 +125,22 @@ class OrangePiPISOWifiSetup:
         ]
         
         # Update package list
-        self.run_command('sudo apt update', 'Updating package list')
+        if self.run_command('sudo apt update', 'Updating package list') is False:
+            return False
         
         # Install packages
         cmd = f"sudo apt install -y {' '.join(packages)}"
-        self.run_command(cmd, 'Installing system packages')
+        if self.run_command(cmd, 'Installing system packages') is False:
+            return False
+            
+        # Verify critical packages were installed
+        critical_packages = ['python3', 'python3-venv', 'nginx', 'dnsmasq', 'supervisor']
+        for package in critical_packages:
+            if self.run_command(f'dpkg -l | grep -q "^ii  {package} "', f'Verifying {package}', critical=False) is None:
+                self.print_error(f"Critical package {package} not installed properly!")
+                return False
         
-        self.print_success("System packages installed")
+        self.print_success("System packages installed and verified")
         return True
 
     def configure_network(self):
@@ -152,7 +166,7 @@ iface {self.usb_interface} inet static
 """
         
         # Backup original config
-        self.run_command('sudo cp /etc/network/interfaces /etc/network/interfaces.backup')
+        self.run_command('sudo cp /etc/network/interfaces /etc/network/interfaces.backup', critical=False)
         
         # Write new config
         try:
@@ -165,11 +179,11 @@ iface {self.usb_interface} inet static
             return False
         
         # Enable IP forwarding
-        self.run_command('echo "net.ipv4.ip_forward=1" | sudo tee -a /etc/sysctl.conf')
-        self.run_command('sudo sysctl -p')
+        self.run_command('echo "net.ipv4.ip_forward=1" | sudo tee -a /etc/sysctl.conf', critical=False)
+        self.run_command('sudo sysctl -p', critical=False)
         
         # Restart networking
-        self.run_command('sudo systemctl restart networking')
+        self.run_command('sudo systemctl restart networking', critical=False)
         
         self.print_success("Network configured")
         return True
@@ -179,17 +193,25 @@ iface {self.usb_interface} inet static
         self.print_step(4, "Setting up Python environment")
         
         # Create virtual environment
-        self.run_command(f'python3 -m venv {self.venv_dir}', 'Creating virtual environment')
+        if self.run_command(f'python3 -m venv {self.venv_dir}', 'Creating virtual environment') is False:
+            return False
+            
+        # Verify virtual environment was created
+        if not (self.venv_dir / 'bin' / 'python').exists():
+            self.print_error("Virtual environment creation failed - directory not found!")
+            return False
         
         # Install Python packages from requirements.txt (tested and working versions)
         pip_cmd = f'{self.venv_dir}/bin/pip'
         
-        self.run_command(f'{pip_cmd} install --upgrade pip', 'Upgrading pip')
+        if self.run_command(f'{pip_cmd} install --upgrade pip', 'Upgrading pip') is False:
+            return False
         
         # Install from requirements.txt if it exists, otherwise install core packages
         requirements_file = self.base_dir / 'requirements.txt'
         if requirements_file.exists():
-            self.run_command(f'{pip_cmd} install -r {requirements_file}', 'Installing packages from requirements.txt')
+            if self.run_command(f'{pip_cmd} install -r {requirements_file}', 'Installing packages from requirements.txt') is False:
+                return False
         else:
             # Fallback to core packages if requirements.txt doesn't exist
             core_packages = [
@@ -198,9 +220,15 @@ iface {self.usb_interface} inet static
                 'requests==2.32.4', 'gunicorn==23.0.0'
             ]
             for package in core_packages:
-                self.run_command(f'{pip_cmd} install {package}', f'Installing {package.split("==")[0]}')
+                if self.run_command(f'{pip_cmd} install {package}', f'Installing {package.split("==")[0]}') is False:
+                    return False
         
-        self.print_success("Python environment ready")
+        # Verify Django was installed
+        if self.run_command(f'{self.venv_dir}/bin/python -c "import django; print(django.VERSION)"', 'Verifying Django installation', critical=False) is None:
+            self.print_error("Django installation failed!")
+            return False
+        
+        self.print_success("Python environment ready and verified")
         return True
 
     def setup_database(self):
@@ -215,14 +243,26 @@ DEBUG=True
 ALLOWED_HOSTS=*
 DATABASE_URL=sqlite:///{self.base_dir}/db.sqlite3
 """
-        with open(self.base_dir / '.env', 'w') as f:
-            f.write(env_content)
+        try:
+            with open(self.base_dir / '.env', 'w') as f:
+                f.write(env_content)
+        except Exception as e:
+            self.print_error(f"Failed to create .env file: {e}")
+            return False
         
         # Run migrations
-        self.run_command(f'{python_cmd} manage.py migrate', 'Running migrations')
-        self.run_command(f'{python_cmd} manage.py collectstatic --noinput', 'Collecting static files')
+        if self.run_command(f'{python_cmd} manage.py migrate', 'Running migrations') is False:
+            return False
+            
+        if self.run_command(f'{python_cmd} manage.py collectstatic --noinput', 'Collecting static files') is False:
+            return False
         
-        self.print_success("Database setup complete")
+        # Verify database was created
+        if not (self.base_dir / 'db.sqlite3').exists():
+            self.print_error("Database file was not created!")
+            return False
+        
+        self.print_success("Database setup complete and verified")
         return True
 
     def create_admin_user(self):
@@ -248,20 +288,26 @@ from django.contrib.auth.models import User
 try:
     if not User.objects.filter(username='{username}').exists():
         User.objects.create_superuser('{username}', '{email}', '{password}')
-        print('Admin user created')
+        print('Admin user created successfully')
     else:
         print('Admin user already exists')
 except Exception as e:
-    print(f'Error: {{e}}')
+    print(f'Error creating admin user: {{e}}')
+    exit(1)
 """
         
-        with open('/tmp/create_admin.py', 'w') as f:
-            f.write(create_script)
+        try:
+            with open('/tmp/create_admin.py', 'w') as f:
+                f.write(create_script)
+        except Exception as e:
+            self.print_error(f"Failed to create admin script: {e}")
+            return False
         
         python_cmd = f'{self.venv_dir}/bin/python'
-        self.run_command(f'{python_cmd} /tmp/create_admin.py', 'Creating admin user')
+        if self.run_command(f'{python_cmd} /tmp/create_admin.py', 'Creating admin user') is False:
+            return False
         
-        self.print_success("Admin user created")
+        self.print_success("Admin user created and verified")
         return True
 
     def configure_services(self):
