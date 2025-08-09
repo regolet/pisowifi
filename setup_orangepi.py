@@ -119,25 +119,46 @@ class OrangePiPISOWifiSetup:
             # Network services  
             'dnsmasq', 'iptables', 'iptables-persistent',
             'hostapd', 'wireless-tools',
+            # System libraries for Python packages
+            'libjpeg-dev', 'zlib1g-dev', 'libpq-dev', 'libmysqlclient-dev',
+            'libxml2-dev', 'libxslt1-dev', 'libffi-dev', 'libcairo2-dev',
+            'pkg-config', 'python3-cffi', 'libpango1.0-dev',
+            # Additional system packages
+            'software-properties-common', 'apt-transport-https', 'ca-certificates',
+            'gnupg', 'lsb-release',
             # Utilities
             'git', 'curl', 'wget', 'unzip', 'nano',
-            'fail2ban', 'ufw', 'net-tools', 'htop'
+            'fail2ban', 'ufw', 'net-tools', 'htop', 'tree', 'vim'
         ]
         
-        # Update package list
+        # Update package list and upgrade system
         if self.run_command('sudo apt update', 'Updating package list') is False:
             return False
-        
-        # Install packages
-        cmd = f"sudo apt install -y {' '.join(packages)}"
-        if self.run_command(cmd, 'Installing system packages') is False:
-            return False
             
-        # Verify critical packages were installed
-        critical_packages = ['python3', 'python3-venv', 'nginx', 'dnsmasq', 'supervisor']
+        # Upgrade existing packages first
+        if self.run_command('sudo apt upgrade -y', 'Upgrading existing packages') is False:
+            return False
+        
+        # Install all packages in smaller batches to avoid issues
+        print(f"   Installing {len(packages)} system packages...")
+        batch_size = 10
+        for i in range(0, len(packages), batch_size):
+            batch = packages[i:i+batch_size]
+            cmd = f"sudo apt install -y {' '.join(batch)}"
+            if self.run_command(cmd, f'Installing batch {i//batch_size + 1}: {", ".join(batch[:3])}...') is False:
+                return False
+            
+        # Verify ALL critical packages were installed
+        critical_packages = [
+            'python3', 'python3-venv', 'python3-dev', 'python3-pip',
+            'nginx', 'dnsmasq', 'supervisor', 'build-essential',
+            'libjpeg-dev', 'zlib1g-dev', 'libssl-dev', 'libffi-dev'
+        ]
+        print(f"   Verifying {len(critical_packages)} critical packages...")
         for package in critical_packages:
             if self.run_command(f'dpkg -l | grep -q "^ii  {package} "', f'Verifying {package}', critical=False) is None:
                 self.print_error(f"Critical package {package} not installed properly!")
+                print(f"   Try: sudo apt install -y {package}")
                 return False
         
         self.print_success("System packages installed and verified")
@@ -207,28 +228,30 @@ iface {self.usb_interface} inet static
         if self.run_command(f'{pip_cmd} install --upgrade pip', 'Upgrading pip') is False:
             return False
         
-        # Install from requirements.txt if it exists, otherwise install core packages
+        # Install from requirements.txt - this is mandatory for PISOWifi
         requirements_file = self.base_dir / 'requirements.txt'
-        if requirements_file.exists():
-            if self.run_command(f'{pip_cmd} install -r {requirements_file}', 'Installing packages from requirements.txt') is False:
-                return False
-        else:
-            # Fallback to core packages if requirements.txt doesn't exist
-            core_packages = [
-                'Django==4.2.23', 'djangorestframework==3.16.0', 'django-jazzmin==3.0.1',
-                'django-cors-headers==4.7.0', 'python-decouple==3.8', 'Pillow==11.3.0',
-                'requests==2.32.4', 'gunicorn==23.0.0'
-            ]
-            for package in core_packages:
-                if self.run_command(f'{pip_cmd} install {package}', f'Installing {package.split("==")[0]}') is False:
-                    return False
-        
-        # Verify Django was installed
-        if self.run_command(f'{self.venv_dir}/bin/python -c "import django; print(django.VERSION)"', 'Verifying Django installation', critical=False) is None:
-            self.print_error("Django installation failed!")
+        if not requirements_file.exists():
+            self.print_error("requirements.txt file not found! This is required for PISOWifi installation.")
             return False
+            
+        if self.run_command(f'{pip_cmd} install -r {requirements_file}', 'Installing ALL packages from requirements.txt') is False:
+            self.print_error("Failed to install packages from requirements.txt!")
+            return False
+            
+        # Verify ALL required packages from requirements.txt were installed
+        print("   Verifying all required Python packages...")
+        required_packages = [
+            'django', 'djangorestframework', 'django_jazzmin', 'corsheaders',
+            'decouple', 'PIL', 'requests', 'gunicorn', 'axes', 'django_otp', 
+            'ratelimit', 'psycopg2', 'pandas', 'numpy'
+        ]
         
-        self.print_success("Python environment ready and verified")
+        for package in required_packages:
+            if self.run_command(f'{self.venv_dir}/bin/python -c "import {package}"', f'Verifying {package}', critical=False) is None:
+                self.print_error(f"Required package '{package}' failed to import!")
+                return False
+        
+        self.print_success(f"Python environment ready with {len(required_packages)} verified packages")
         return True
 
     def setup_database(self):
